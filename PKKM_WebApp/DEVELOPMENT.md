@@ -235,3 +235,15 @@ PPKPT, dan Asrama yang dapat diakses akun, tanpa duplikasi. Grup PPK Tel-U
 tersendiri tidak ikut dihitung. Filter, peserta, grafik, dan survei mengikuti
 kumpulan ID gabungan tersebut. Overview hanya mode tampilan, bukan grup
 kegiatan baru yang disimpan di database; tidak ada formulir Laporan di sini.
+
+## Tren kegiatan bulanan
+
+Komponen MonthlyActivityTrend menerima kegiatan yang sudah difilter grup,
+tahun, triwulan, kategori, dan pencarian dashboard. Grafik garis menampilkan
+Januari–Desember dengan satu seri per tahun, termasuk bulan bernilai nol.
+Nama dinormalisasi NFKC, huruf kecil, dan spasi, lalu dihitung unik untuk
+setiap bulan/tahun. Nama yang sama lintas kategori atau grup pada dashboard
+gabungan tetap satu kegiatan dalam bulan yang sama. Bulan berbeda dihitung
+masing-masing satu kali. Grafik tidak mengubah hitungan kartu Total Kegiatan
+atau record database. Nama kosong serta tanggal kosong/tidak valid tidak
+ditebak dan jumlahnya diberi keterangan. Tabel angka tersedia di bawah grafik.

@@ -4,6 +4,7 @@ import Chart from 'chart.js/auto';
 import * as XLSX from 'xlsx';
 import {readParticipants} from './spreadsheet.mjs';
 import StudentRecap from './StudentRecap.jsx';
+import MonthlyActivityTrend from './MonthlyActivityTrend.jsx';
 import PrintReport from './PrintReport.jsx';
 import {downloadReportPdf} from './reportPdf.mjs';
 import MigrationPanel from './MigrationPanel.jsx';
@@ -668,6 +669,8 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
 
                   </div>
                 </div>
+
+                <MonthlyActivityTrend activities={filteredActivities} />
 
                 {/* MODUL ANALISIS SURVEY KEPUASAN */}
                 <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">

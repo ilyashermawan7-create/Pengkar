@@ -648,6 +648,27 @@ def main():
                 assert roles.locator('option').evaluate_all('(options)=>options.map(option=>option.value)')==['pengkar','asrama','viewer']
                 expect(roles).to_have_value('pengkar')
                 print('PASS: Operator report contains only allowed sections and account role choices are restricted')
+                trend_auth={'Authorization':'Bearer '+page.evaluate("sessionStorage.getItem('pkkm_token')")}
+                for name,date in [('Webinar Bulanan','2031-01-02'),(' webinar   bulanan ','2031-01-20'),('Webinar Bulanan','2031-02-05'),('Workshop Bulanan','2031-01-10')]:
+                    result=page.request.post(url+'/api/dashboard/activities',headers=trend_auth,data={'namaKegiatan':name,'tanggal':date,'program':'Pengembangan Karakter'})
+                    assert result.status==201,result.text()
+                page.reload()
+                page.get_by_label('Tahun',exact=True).select_option('2031')
+                trend=page.get_by_role('region',name='Tren kegiatan bulanan',exact=True)
+                expect(trend.locator('canvas')).to_be_visible()
+                trend.get_by_text('Lihat Angka Kegiatan Bulanan',exact=True).click()
+                table=trend.get_by_role('table',name='Jumlah kegiatan unik per bulan',exact=True)
+                expect(table.locator('thead')).to_contain_text('2031')
+                expect(table.get_by_role('row',name='Jan 2',exact=True)).to_be_visible()
+                expect(table.get_by_role('row',name='Feb 1',exact=True)).to_be_visible()
+                expect(table.locator('tbody tr')).to_have_count(12)
+                page.get_by_label('Triwulan',exact=True).select_option('TW2')
+                expect(trend).to_contain_text('Belum ada kegiatan bernama dan bertanggal lengkap')
+                for group in ['overview','pengkar','asrama','ppk-telu']:
+                    page.get_by_label('Grup Pengguna',exact=True).select_option(group)
+                    if group=='pengkar':page.get_by_role('button',name='Reset Filter',exact=True).click()
+                    expect(page.get_by_role('region',name='Tren kegiatan bulanan',exact=True)).to_be_visible()
+                print('PASS: monthly chart in all groups, duplicate names counted once per month, year/quarter filters and empty state')
                 assert not errors, errors
                 print('PASS: mobile navigation; no browser JavaScript errors')
                 browser.close()
