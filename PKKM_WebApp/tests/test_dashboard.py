@@ -21,7 +21,7 @@ class DashboardTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(server.app)
         with server.connect() as c:
-            for table in ('survey_responses','activity_participants','activity_details','students',
+            for table in ('pending_surveys','student_directory','survey_responses','activity_participants','activity_details','students',
                           'evaluations','activities','audit','sessions','users'):
                 c.execute(f'DELETE FROM {table}')
             c.execute('INSERT INTO users(username,password_hash,full_name,role) VALUES(?,?,?,?)',
@@ -202,7 +202,7 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(data['activities'][0]['skorSurvey'],3)
 
     def test_satisfaction_missing_or_out_of_range_answers_are_rejected(self):
-        for answers in ([4]*19,[4]*19+[6],[4]*19+[None]):
+        for answers in ([4]*19,[4]*19+[6]):
             response=self.client.post('/api/dashboard/activities',headers=self.headers,json=self.activity(surveys=[{
                 'tanggalSurvey':'2026-11-04','answers':answers}]))
             self.assertEqual(response.status_code,422,response.text)
@@ -279,6 +279,84 @@ class DashboardTests(unittest.TestCase):
         result=self.client.post('/api/migrate/surveys',headers=self.headers,json={'items':items})
         self.assertEqual(result.json()['skipped'],2)
         self.assertEqual(len(self.snapshot()['surveys']),2)
+
+    def test_master_import_without_activity_or_nim_keeps_incomplete_records(self):
+        items=[{'nim':'123456789012','nama':'Mahasiswa Master','prodi':'Informatika'},
+               {'nama':'Nama Tanpa NIM','sourceKey':'source:2'},
+               {'nim':'000000000001','nama':'','fakultas':'FIF'}]
+        response=self.client.post('/api/migrate/students',headers=self.headers,json={'items':items})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()['created'],3)
+        data=self.snapshot()
+        self.assertEqual(len(data['masterStudents']),3)
+        self.assertEqual(data['students'],[])
+        self.assertEqual(data['activities'],[])
+        self.assertEqual(next(s for s in data['masterStudents'] if s['nama']=='Nama Tanpa NIM')['nim'],'')
+        repeated=self.client.post('/api/migrate/students',headers=self.headers,json={'items':items})
+        self.assertEqual(repeated.json()['skipped'],3)
+
+    def test_master_reimport_preserves_known_values_and_can_complete_missing_nim(self):
+        self.client.post('/api/migrate/students',headers=self.headers,json={'items':[{'nama':'Belum Ada NIM','sourceKey':'row2','fakultas':'FIF'}]})
+        row=self.snapshot()['masterStudents'][0]
+        response=self.client.post('/api/migrate/students',headers=self.headers,json={'items':[{
+            'directoryId':row['directoryId'],'nim':'123456789012','nama':'','prodi':'Informatika'}]})
+        self.assertEqual(response.status_code,200,response.text)
+        data=self.snapshot()['masterStudents']
+        self.assertEqual(len(data),1)
+        self.assertEqual(data[0]['nim'],'123456789012')
+        self.assertEqual(data[0]['nama'],'Belum Ada NIM')
+        self.assertEqual(data[0]['fakultas'],'FIF')
+
+    def test_master_import_is_not_available_to_viewer_or_scoped_operator(self):
+        _,headers=self.new_user('viewer-master','viewer')
+        response=self.client.post('/api/migrate/students',headers=headers,json={'items':[{'nama':'Uji'}]})
+        self.assertEqual(response.status_code,403)
+        _,headers=self.new_user('pengkar-master','pengkar')
+        response=self.client.post('/api/migrate/students',headers=headers,json={'items':[{'nama':'Uji'}]})
+        self.assertEqual(response.status_code,403)
+
+    def test_partial_survey_values_are_null_and_excluded_from_averages(self):
+        ident=self.create(self.activity(surveys=[{'answers':[4,None,2]+[None]*17}]))
+        data=self.snapshot()
+        self.assertEqual(data['surveys'][0]['skorTotal'],3)
+        self.assertEqual(data['surveys'][0]['skorMateri'],3)
+        self.assertIsNone(data['surveys'][0]['skorNarasumber'])
+        self.assertIsNone(data['surveys'][0]['tanggalSurvey'])
+        self.assertEqual(data['activities'][0]['skorSurvey'],3)
+        self.assertEqual(self.client.get('/api/summary',headers=self.headers).status_code,200)
+        response=self.client.put(f'/api/dashboard/activities/{ident}/surveys',headers=self.headers,json=[{'answers':[None]*20}])
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertIsNone(self.snapshot()['surveys'][0]['skorTotal'])
+        self.assertIsNone(self.snapshot()['activities'][0]['skorSurvey'])
+
+    def test_year_only_activity_import_does_not_invent_date_or_counts(self):
+        items=[{'namaKegiatan':'Arsip Tahun Saja','tahun':'2024','sourceKey':'year-row2'}]
+        response=self.client.post('/api/migrate/activities',headers=self.headers,json={'items':items})
+        self.assertEqual(response.status_code,200,response.text)
+        row=self.snapshot()['activities'][0]
+        self.assertEqual(row['tanggal'],'')
+        self.assertEqual(row['tahun'],'2024')
+        self.assertEqual(row['triwulan'],'')
+        self.assertIsNone(row['jumlahPeserta'])
+        self.assertIsNone(row['takPanitia'])
+        self.assertEqual(self.client.get('/api/summary?year=2024',headers=self.headers).json()['total'],1)
+        repeated=self.client.post('/api/migrate/activities',headers=self.headers,json={'items':items})
+        self.assertEqual(repeated.json()['skipped'],1)
+
+    def test_unmatched_survey_is_saved_and_can_be_linked_later(self):
+        items=[{'sourceRow':2,'importKey':'pending-row2','response':{'answers':[None,5]+[None]*18}}]
+        response=self.client.post('/api/migrate/surveys',headers=self.headers,json={'items':items})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()['pending'],1)
+        self.client.post('/api/migrate/surveys',headers=self.headers,json={'items':items})
+        self.assertEqual(len(self.snapshot()['pendingSurveys']),1)
+        ident=self.create(self.activity(surveys=[]))
+        pending=self.snapshot()['pendingSurveys'][0]
+        response=self.client.post(f"/api/migrate/surveys/pending/{pending['id']}/resolve",headers=self.headers,json={'activityId':ident})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(self.snapshot()['pendingSurveys'],[])
+        self.assertEqual(self.snapshot()['surveys'][0]['activityId'],ident)
+        self.assertEqual(self.snapshot()['surveys'][0]['skorTotal'],5)
 
 
 if __name__ == '__main__':

@@ -23,6 +23,11 @@ lama, akun dan password yang sudah tersimpan tetap dipakai.
 - Endpoint dashboard, profil, akun, dan migrasi: `dashboard_api.py`.
 - Impor massal dan pencocokan kegiatan: `frontend/MigrationPanel.jsx`, `frontend/migration.mjs`.
 - Instrumen kepuasan dan pertanyaan asli: `survey_schema.json`, `frontend/SurveySummary.jsx`.
+- Master mahasiswa dan survei yang belum cocok memakai tabel aditif
+  `student_directory` dan `pending_surveys`. Data master tidak menaikkan
+  kehadiran kegiatan. Nilai kosong survei memakai `null`, dan tanggal
+  kegiatan yang belum diketahui memakai string kosong pada tabel lama
+  dengan metadata Tahun tersendiri; tidak dibuat tanggal perkiraan.
 - Endpoint lama yang masih dipertahankan: `server.py`.
 
 Setelah mengedit frontend, bangun aset dan commit hasilnya:
@@ -84,6 +89,8 @@ Survei kepuasan memakai 20 jawaban 1–5 dan satu saran bebas; pertanyaan asli
 tidak diubah. Format lama empat skor tetap dibaca sebagai format legacy.
 Skor kosong tidak diganti angka 5. Lihat [panduan migrasi](MIGRASI_DATA.md)
 untuk template, penilaian, pencocokan kegiatan, dan aturan duplikat.
+Impor sekarang menerima kolom kosong, menghitung rerata dari nilai terisi,
+dan menyimpan survei tanpa kegiatan tujuan untuk dicocokkan belakangan.
 Tanggal dan triwulan berasal dari tanggal kegiatan. Grafik, statistik,
 peserta unik berdasarkan NIM, dan ekspor mengikuti filter yang sama.
 Total peserta adalah akumulasi jumlah kehadiran; peserta unik hanya dihitung

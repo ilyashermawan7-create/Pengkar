@@ -9,6 +9,7 @@ import {downloadReportPdf} from './reportPdf.mjs';
 import MigrationPanel from './MigrationPanel.jsx';
 import SurveySummary from './SurveySummary.jsx';
 import surveySchema from '../survey_schema.json';
+import {average} from './statistics.mjs';
 import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './migration.mjs';
 
     const { useState, useEffect, useRef } = React;
@@ -27,6 +28,8 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const [activeNav, setActiveNav] = useState('dashboard');
 
       const [students, setStudents] = useState([]);
+      const [masterStudents,setMasterStudents]=useState([]);
+      const [pendingSurveys,setPendingSurveys]=useState([]);
       const [activities, setActivities] = useState([]);
       const [surveys, setSurveys] = useState([]);
       const [adminList, setAdminList] = useState([]);
@@ -54,7 +57,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       };
       const load = async (authToken=token) => {
         const data = await api('/dashboard', {}, authToken);
-        setActivities(data.activities);setStudents(data.students);setSurveys(data.surveys);
+        setActivities(data.activities);setStudents(data.students);setSurveys(data.surveys);setMasterStudents(data.masterStudents||[]);setPendingSurveys(data.pendingSurveys||[]);
         setAdminList(data.adminList);setProfileData(data.profile);return data;
       };
       const run = async (operation) => {
@@ -110,14 +113,14 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const filteredSurveys=surveys.filter(s=>visibleIds.has(s.activityId));
       const fullSurveys=filteredSurveys.filter(s=>s.answers?.length===20);
       const measuredSurveys=fullSurveys.length?fullSurveys:filteredSurveys;
-      const years=[...new Set([...activities.map(a=>a.tahun),String(new Date().getFullYear())])].sort().reverse();
+      const years=[...new Set([...activities.map(a=>a.tahun).filter(Boolean),String(new Date().getFullYear())])].sort().reverse();
       const categories=[...new Set(['Pengembangan Karakter','Pengkar Asrama','Wawasan Kebangsaan','Konseling','Kesehatan Mental','PPKPT',...activities.map(a=>a.kategori)])];
-      const mean = values => values.length ? values.reduce((a,b)=>a+b,0)/values.length : null;
+      const mean = average;
       const surveyMetrics=surveySchema.groups.map(({label,field:key})=>{
         const value=mean(measuredSurveys.map(s=>s[key]).filter(value=>value!==null&&value!==undefined));
         return {label,val:value===null?'—':(value*20).toFixed(1)+'%',skor:value===null?'—':value.toFixed(2),status:value===null?'Belum ada respons':value>=4.5?'Sangat Memuaskan':value>=3.5?'Memuaskan':'Perlu Perbaikan'};
       });
-      const satisfaction=mean(measuredSurveys.map(s=>s.skorTotal??(s.skorMateri+s.skorNarasumber+s.skorFasilitas+s.skorDampakKarakter)/4));
+      const satisfaction=mean(measuredSurveys.map(s=>s.skorTotal));
       const facultyCounts=Object.entries([...new Map(filteredStudents.map(s=>[s.nim,s])).values()].reduce((acc,s)=>{const key=s.fakultas||'Belum diisi';acc[key]=(acc[key]||0)+1;return acc;},{})).sort((a,b)=>b[1]-a[1]);
 
       // Ref Chart Dashboard
@@ -130,9 +133,9 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         if (!isLoggedIn || activeNav !== 'dashboard') return;
         const palette=['#dc2626','#991b1b','#334155','#eab308','#06b6d4','#15803d','#2563eb'];
         const labels=[...new Set(filteredActivities.map(a=>a.kategori))];
-        const chartYears=[...new Set(filteredActivities.map(a=>a.tahun))].sort();
+        const chartYears=[...new Set(filteredActivities.map(a=>a.tahun||'Belum diisi'))].sort();
         if (pieChartRef.current) pieInstance.current=new Chart(pieChartRef.current,{type:'pie',data:{labels,datasets:[{data:labels.map(label=>filteredActivities.filter(a=>a.kategori===label).length),backgroundColor:palette,borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{position:'right',labels:{boxWidth:10,font:{size:9}}}}}});
-        if (barChartRef.current) barInstance.current=new Chart(barChartRef.current,{type:'bar',data:{labels:chartYears,datasets:labels.map((label,index)=>({label,data:chartYears.map(year=>filteredActivities.filter(a=>a.tahun===year&&a.kategori===label).length),backgroundColor:palette[index%palette.length]}))},options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{y:{beginAtZero:true,ticks:{precision:0}},x:{grid:{display:false}}},plugins:{legend:{position:'top',labels:{boxWidth:10,font:{size:10}}}}}});
+        if (barChartRef.current) barInstance.current=new Chart(barChartRef.current,{type:'bar',data:{labels:chartYears,datasets:labels.map((label,index)=>({label,data:chartYears.map(year=>filteredActivities.filter(a=>(a.tahun||'Belum diisi')===year&&a.kategori===label).length),backgroundColor:palette[index%palette.length]}))},options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{y:{beginAtZero:true,ticks:{precision:0}},x:{grid:{display:false}}},plugins:{legend:{position:'top',labels:{boxWidth:10,font:{size:10}}}}}});
         return ()=>{pieInstance.current?.destroy();barInstance.current?.destroy();};
       }, [isLoggedIn,activeNav,activities,students,searchNim,filterYear,filterTw,filterCategory]);
       const handleInitialLogin = async (e) => {
@@ -145,13 +148,13 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       };
       const handleLogout = async () => {
         try {await api('/logout',{method:'POST'});} catch {}
-        sessionStorage.removeItem('pkkm_token');setToken('');setIsLoggedIn(false);setActivities([]);setStudents([]);setSurveys([]);setAdminList([]);setNotice('');resetActivity();
+        sessionStorage.removeItem('pkkm_token');setToken('');setIsLoggedIn(false);setActivities([]);setStudents([]);setMasterStudents([]);setPendingSurveys([]);setSurveys([]);setAdminList([]);setNotice('');resetActivity();
       };
 
       // Lookup Mahasiswa
       const findStudent = (nim) => {
         if (!nim) return null;
-        return students.find(s => String(s.nim).trim() === String(nim).trim());
+        return masterStudents.find(s=>String(s.nim).trim()===String(nim).trim()) || students.find(s => String(s.nim).trim() === String(nim).trim());
       };
 
       const handleImportParticipantFile = async (e) => {
@@ -159,7 +162,8 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         setParticipantImportError('');
         await run(async()=>{
           try {
-            const {students:unique,duplicateCount,sheetName}=await readParticipants(file);
+            const {students:raw,duplicateCount,sheetName}=await readParticipants(file);
+            const unique=raw.map(student=>{const known=findStudent(student.nim);return Object.fromEntries(['nim','nama','prodi','fakultas','kampus'].map(key=>[key,student[key]||known?.[key]||'']));});
             setParticipantRows(unique);
             setImportedParticipantFile({fileName:file.name,totalCount:unique.length,duplicateCount,sheetName});
             setActivityForm(prev=>({...prev,jumlahPeserta:unique.length}));
@@ -184,7 +188,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
           if(!expectedName&&imported.items[0].namaKegiatan)setActivityForm(prev=>({...prev,namaKegiatan:imported.items[0].namaKegiatan}));
           setSurveyRows(parsed);
           const average=mean(parsed.map(s=>s.skorTotal));
-          setActivityForm(prev=>({...prev,targetSurveyKepuasan:average.toFixed(2),catatanSurvey:`Diimpor dari ${file.name}: ${parsed.length} respons.`}));
+          setActivityForm(prev=>({...prev,targetSurveyKepuasan:average===null?'':average.toFixed(2),catatanSurvey:`Diimpor dari ${file.name}: ${parsed.length} respons.`}));
           setNotice(parsed.length+' respons survei siap disimpan.');
         });
       };
@@ -198,13 +202,13 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       };
       const resetActivity = () => {setEditingId(null);setActivityForm({...freshForm(),...(profileData.role==='asrama'?{program:'Asrama',kategori:'Pengkar Asrama',urusan:'Asrama'}:{})});setParticipantRows([]);setSurveyRows([]);setImportedParticipantFile(null);setParticipantImportError('');};
       const editActivity = (act) => {
-        setEditingId(act.id);setActivityForm({...freshForm(),...act,targetSurveyKepuasan:act.targetSurveyKepuasan??''});
+        setEditingId(act.id);setActivityForm({...freshForm(),...act,tanggal:act.tanggal||'',jumlahPeserta:act.jumlahPeserta??'',takPanitia:act.takPanitia??'',takPeserta:act.takPeserta??'',targetSurveyKepuasan:act.targetSurveyKepuasan??''});
         setParticipantRows(students.filter(s=>s.activityId===act.id));setSurveyRows(surveys.filter(s=>s.activityId===act.id));
         setImportedParticipantFile(null);setParticipantImportError('');setActiveNav('laporan');window.scrollTo(0,0);
       };
       const handleSaveActivity = async (e) => {
         e.preventDefault();await run(async()=>{
-          const payload={...activityForm,jumlahPeserta:Number(activityForm.jumlahPeserta||0),takPanitia:Number(activityForm.takPanitia),takPeserta:Number(activityForm.takPeserta),targetSurveyKepuasan:activityForm.targetSurveyKepuasan===''?null:Number(activityForm.targetSurveyKepuasan),participants:participantRows,surveys:surveyRows};
+          const payload={...activityForm,tanggal:activityForm.tanggal||null,jumlahPeserta:activityForm.jumlahPeserta===''?null:Number(activityForm.jumlahPeserta),takPanitia:activityForm.takPanitia===''?null:Number(activityForm.takPanitia),takPeserta:activityForm.takPeserta===''?null:Number(activityForm.takPeserta),targetSurveyKepuasan:activityForm.targetSurveyKepuasan===''?null:Number(activityForm.targetSurveyKepuasan),participants:participantRows,surveys:surveyRows};
           await api('/dashboard/activities'+(editingId?'/'+editingId:''),{method:editingId?'PUT':'POST',body:JSON.stringify(payload)});
           await load();resetActivity();setNotice('Kegiatan berhasil disimpan di server.');
         });
@@ -675,7 +679,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                       <p className="text-xs text-slate-500">
                         Evaluasi komprehensif berdasarkan {filteredSurveys.length} respons mahasiswa peserta kegiatan pembinaan karakter.
                       </p>
-                      <p className="text-xs text-slate-500 mt-1">{fullSurveys.length?`Indeks memakai ${fullSurveys.length} respons lengkap 20 pertanyaan; format lama tidak dicampur.`:'Belum ada respons 20 pertanyaan. Ringkasan format lama ditampilkan bila tersedia.'}</p>
+                      <p className="text-xs text-slate-500 mt-1">{fullSurveys.length?`Indeks memakai ${fullSurveys.length} respons instrumen 20 pertanyaan; nilai kosong diabaikan dan format lama tidak dicampur.`:'Belum ada respons 20 pertanyaan. Ringkasan format lama ditampilkan bila tersedia.'}</p>
                     </div>
                     <div className="text-right bg-red-50 p-3 rounded-2xl border border-red-100">
                       <span className="text-[10px] font-bold text-[#D71920] block uppercase tracking-wider">Indeks Kepuasan Total</span>
@@ -708,7 +712,8 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {activeNav === 'laporan' && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
 
-                <MigrationPanel activities={activities} role={profileData.role} api={api} reload={load} />
+                <MigrationPanel activities={activities} role={profileData.role} api={api} reload={load} pendingSurveys={pendingSurveys} />
+                {['admin','operator'].includes(profileData.role)&&<StudentRecap mode="master" rows={masterStudents} activities={activities} />}
                 <div className="bg-white border rounded-2xl p-4 space-y-3 text-xs no-print"><h3 className="font-bold">Filter Laporan</h3><div className="flex flex-wrap gap-3"><input aria-label="Cari laporan" placeholder="NIM / nama kegiatan" value={searchNim} onChange={e=>setSearchNim(e.target.value)} className="border rounded-lg p-2"/><select aria-label="Tahun laporan" value={filterYear} onChange={e=>setFilterYear(e.target.value)} className="border rounded-lg p-2"><option>Semua Tahun</option>{years.map(y=><option key={y}>{y}</option>)}</select><select aria-label="Triwulan laporan" value={filterTw} onChange={e=>setFilterTw(e.target.value)} className="border rounded-lg p-2"><option>Semua Triwulan</option>{['TW1','TW2','TW3','TW4'].map(q=><option key={q}>{q}</option>)}</select><select aria-label="Kategori laporan" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)} className="border rounded-lg p-2"><option>Semua Kategori</option>{categories.map(c=><option key={c}>{c}</option>)}</select><button onClick={()=>{setSearchNim('');setFilterYear('Semua Tahun');setFilterTw('Semua Triwulan');setFilterCategory('Semua Kategori');}} className="border rounded-lg p-2">Reset Filter</button></div></div>
                 {/* FORM INPUT KEGIATAN 16 FIELD MASTER PERSIS GAMBAR LAMPIRAN */}
                 <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
@@ -734,9 +739,8 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
 
                       {/* Baris 1: Nama Kegiatan, Tanggal, Tahun & Triwulan (Persis Foto) */}
                       <div className="md:col-span-2">
-                        <label className="font-bold text-slate-800 block mb-1" htmlFor="field-7">Nama Kegiatan *</label>
+                        <label className="font-bold text-slate-800 block mb-1" htmlFor="field-7">Nama Kegiatan</label>
                         <input id="field-7" type="text"
-                          required
                           placeholder="Contoh: Webinar Relationship Management"
                           value={activityForm.namaKegiatan}
                           onChange={(e) => setActivityForm({ ...activityForm, namaKegiatan: e.target.value })}
@@ -745,29 +749,30 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                       </div>
 
                       <div>
-                        <label className="font-bold text-slate-800 block mb-1" htmlFor="field-8">Tanggal Kegiatan *</label>
+                        <label className="font-bold text-slate-800 block mb-1" htmlFor="field-8">Tanggal Kegiatan</label>
                         <input id="field-8" type="date"
-                          required
                           value={activityForm.tanggal}
-                          onChange={(e) => {const date=e.target.value;setActivityForm({...activityForm,tanggal:date,tahun:date.slice(0,4),triwulan:'TW'+(Math.floor((Number(date.slice(5,7))-1)/3)+1)});}}
+                          onChange={(e) => {const date=e.target.value;setActivityForm({...activityForm,tanggal:date,tahun:date?date.slice(0,4):activityForm.tahun,triwulan:date?'TW'+(Math.floor((Number(date.slice(5,7))-1)/3)+1):''});}}
                           className="w-full border border-slate-300 rounded-xl p-3 outline-none focus:border-[#D71920] text-sm"
                         />
                       </div>
 
                       <div>
-                        <label className="font-bold text-slate-800 block mb-1">Tahun & Triwulan *</label>
+                        <label className="font-bold text-slate-800 block mb-1">Tahun & Triwulan</label>
                         <div className="flex gap-2">
                           <input
                             type="text"
                             value={activityForm.tahun}
-                            readOnly title="Otomatis dari tanggal kegiatan"
+                            readOnly={!!activityForm.tanggal} onChange={event=>setActivityForm({...activityForm,tahun:event.target.value})} title="Otomatis dari tanggal jika ada; boleh diisi tanpa tanggal"
                             className="w-1/2 border border-slate-300 rounded-xl p-3 outline-none focus:border-[#D71920] text-sm font-semibold"
                           />
                           <select
+                            aria-label="Triwulan kegiatan"
                             value={activityForm.triwulan}
                             disabled title="Otomatis dari tanggal kegiatan"
                             className="w-1/2 border border-slate-300 rounded-xl p-3 outline-none focus:border-[#D71920] bg-white font-bold text-sm"
                           >
+                            <option value="">Belum diisi</option>
                             <option value="TW1">TW1</option>
                             <option value="TW2">TW2</option>
                             <option value="TW3">TW3</option>
@@ -1047,7 +1052,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
 
                 {canWrite && editingId && <p className="text-xs text-slate-500">Peserta dan respons survei lama tetap dipakai bila Anda tidak mengimpor berkas pengganti.</p>}
                 {/* TABEL KEGIATAN TERDATA */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-6 space-y-4">
+                <div role="region" aria-label="Daftar kegiatan tersimpan" className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-6 space-y-4">
                   <h3 className="font-bold text-sm text-slate-900">Daftar Kegiatan Terpublikasi ({filteredActivities.length})</h3>
                   <div className="flex gap-2"><button onClick={exportActivities} className="border rounded-lg px-3 py-2 text-xs">Ekspor Excel</button><button disabled={busy} onClick={()=>run(()=>downloadReportPdf({activities:filteredActivities,students:filteredStudents,surveys:filteredSurveys,filters:{year:filterYear,quarter:filterTw,category:filterCategory,search:searchNim},preparedBy:profileData.nama}))} className="border rounded-lg px-3 py-2 text-xs">Unduh PDF</button></div>
                   <p className="text-xs text-slate-500">PDF diunduh langsung dan memuat seluruh data sesuai filter laporan, tanpa formulir aplikasi.</p>
@@ -1072,8 +1077,8 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                             <td className="py-2.5 px-3 whitespace-nowrap">{act.tanggal}</td>
                             <td className="py-2.5 px-3">{act.tahun}</td>
                             <td className="py-2.5 px-3">{act.triwulan}</td>
-                            <td className="py-2.5 px-3 font-bold text-slate-800">{act.namaKegiatan}</td>
-                            <td className="py-2.5 px-3">{act.jumlahPeserta} Mhs</td>
+                            <td className="py-2.5 px-3 font-bold text-slate-800">{act.namaKegiatan||'Belum diisi'}</td>
+                            <td className="py-2.5 px-3">{act.jumlahPeserta??'—'} Mhs</td>
                             <td className="py-2.5 px-3 font-bold text-[#D71920]">★ {act.skorSurvey ?? "—"}</td>
                             <td className="py-2.5 px-3">{act.pembicara}</td>
                             <td className="py-2.5 px-3 text-blue-600 underline font-mono truncate max-w-xs">{/^https?:\/\//i.test(act.linkEvident)?<a href={act.linkEvident} target="_blank" rel="noopener noreferrer">{act.linkEvident}</a>:act.linkEvident}</td>

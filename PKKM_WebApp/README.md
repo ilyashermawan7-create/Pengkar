@@ -12,6 +12,10 @@ kepuasan mempertahankan 20 pertanyaan asli serta pertanyaan saran topik.
 Ikuti [panduan migrasi data](MIGRASI_DATA.md) untuk memakai template Excel/CSV
 dan mencocokkan survei dengan nama kegiatan yang benar.
 
+Master mahasiswa juga dapat diimpor tanpa kegiatan. Kolom kosong tetap
+diproses, Tahun tersedia pada template kegiatan, dan survei yang belum
+memiliki kegiatan tujuan disimpan untuk dicocokkan belakangan.
+
 ## Menjalankan (Windows PowerShell)
 
 ```powershell

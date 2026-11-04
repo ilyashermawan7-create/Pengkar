@@ -1,6 +1,7 @@
 import React from 'react';
 import {createPortal} from 'react-dom';
 import surveySchema from '../survey_schema.json';
+import {average} from './statistics.mjs';
 
 function Table({columns,rows,empty}) {
   return <table><thead><tr>{columns.map(column=><th key={column}>{column}</th>)}</tr></thead><tbody>
@@ -24,7 +25,7 @@ export default function PrintReport({activities,students,surveys,filters,prepare
     <p className="report-summary">Ringkasan: {activities.length} kegiatan · {activities.reduce((sum,a)=>sum+a.jumlahPeserta,0)} kehadiran · {people.length} mahasiswa unik teridentifikasi · {surveys.length} respons survei.</p>
     <h2>Data Kegiatan</h2>
     <Table columns={['No.','Tanggal / TW','Nama Kegiatan','Program / Kategori','Peserta','Skor Survei','Narasumber','Eviden / Laporan']} empty="Tidak ada kegiatan sesuai filter yang dipilih." rows={activities.map((a,index)=>[
-      index+1,`${a.tanggal} / ${a.triwulan}`,a.namaKegiatan,`${a.program} / ${a.kategori}`,a.jumlahPeserta,
+      index+1,`${a.tanggal||'—'} / ${a.triwulan||'—'} (Tahun ${a.tahun||'—'})`,a.namaKegiatan,`${a.program} / ${a.kategori}`,a.jumlahPeserta,
       a.skorSurvey===null||a.skorSurvey===undefined?'Belum ada nilai':Number(a.skorSurvey).toFixed(2),a.pembicara||'—',
       [a.linkEvident,a.laporan].filter(Boolean).join('\n')||'—',
     ])}/>
@@ -38,7 +39,8 @@ export default function PrintReport({activities,students,surveys,filters,prepare
     ])}/></>}
     {surveys.some(response=>response.answers?.length===20)&&<><h2>Survei Kepuasan — Pertanyaan Asli</h2><Table columns={['No.','Pertanyaan','Respons','Rerata / 5']} rows={surveySchema.questions.map((question,index)=>{
       const responses=surveys.filter(response=>response.answers?.length===20);
-      return [index+1,question,responses.length,(responses.reduce((sum,response)=>sum+response.answers[index],0)/responses.length).toFixed(2)];
+      const values=responses.map(response=>response.answers[index]).filter(value=>value!==null);
+      return [index+1,question,values.length,average(values)?.toFixed(2)??'—'];
     })}/></>}
   </article>,document.body);
 }

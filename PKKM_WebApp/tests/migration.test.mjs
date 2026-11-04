@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
 import schema from '../survey_schema.json' with {type:'json'};
-import {readActivities,readSurveyResponses,matchSurveyActivities,parseScore} from '../frontend/migration.mjs';
+import {readActivities,readSurveyResponses,matchSurveyActivities,parseScore,readDirectory} from '../frontend/migration.mjs';
 
 function file(rows){
   const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet(rows),'Data');
@@ -44,11 +44,14 @@ test('Likert labels map 1 to 5 without changing question text',async()=>{
   assert.equal(parseScore('Sangat puas',2,'Q'),5);
 });
 
-test('blank answers and missing question columns do not become fabricated five scores',async()=>{
+test('blank answers and missing question columns remain null instead of becoming fabricated scores',async()=>{
   const scores=Array(20).fill(4);scores[3]='';
-  await assert.rejects(readSurveyResponses(responseFile(scores)),/Pertanyaan 4 wajib/);
+  const first=await readSurveyResponses(responseFile(scores));
+  assert.equal(first.items[0].response.answers[3],null);
+  assert.equal(first.items[0].response.skorTotal,4);
   const headers=['NIM','Tanggal Survey',...schema.questions.slice(0,19)];
-  await assert.rejects(readSurveyResponses(file([headers,['123456789012','2026-11-04',...Array(19).fill(4)]])),/pertanyaan 20 tidak ditemukan/);
+  const second=await readSurveyResponses(file([headers,['123456789012','2026-11-04',...Array(19).fill(4)]]));
+  assert.equal(second.items[0].response.answers[19],null);
 });
 
 test('surveys with no NIM are still imported when the original questions identify the header',async()=>{
@@ -104,4 +107,34 @@ test('the legacy four-score format remains distinct from the original 20 questio
   assert.equal(result.format,'legacy-4');
   assert.equal(result.items[0].response.answers,undefined);
   assert.equal(result.items[0].response.skorTotal,4);
+});
+
+test('master students without NIM or name are processed independently of activities',async()=>{
+  const records=await readDirectory(file([['NIM','Nama Mahasiswa','Program Studi','Fakultas'],
+    ['','Nama Saja','',''],['000000000001','','Informatika','FIF']]));
+  assert.equal(records[0].nim,'');
+  assert.equal(records[1].nama,'');
+  assert.equal(records[1].nim,'000000000001');
+  assert.ok(records.every(record=>record.sourceKey));
+  const metadataOnly=await readDirectory(file([['Program Studi','Fakultas'],['Informatika','FIF']]));
+  assert.equal(metadataOnly[0].nama,'');
+  assert.equal(metadataOnly[0].nim,'');
+  assert.equal(metadataOnly[0].prodi,'Informatika');
+});
+
+test('year-only activities keep year and missing fields instead of inventing a date',async()=>{
+  const rows=await readActivities(file([['Nama Kegiatan','Tahun','Jumlah Peserta'],['Arsip 2024','2024','']]));
+  assert.equal(rows[0].tahun,'2024');
+  assert.equal(rows[0].tanggal,null);
+  assert.equal(rows[0].jumlahPeserta,null);
+  assert.equal(rows[0].takPanitia,null);
+});
+
+test('empty survey dates and unmatched targets can be preserved as pending',async()=>{
+  const parsed=await readSurveyResponses(responseFile([5,...Array(19).fill('')],{'Timestamp':'','Nama Kegiatan':''}));
+  assert.equal(parsed.items[0].response.tanggalSurvey,null);
+  assert.equal(parsed.items[0].response.skorTotal,5);
+  const pending=matchSurveyActivities(parsed.items,[],'',true);
+  assert.equal(pending[0].activityId,null);
+  assert.ok(pending[0].unresolved);
 });

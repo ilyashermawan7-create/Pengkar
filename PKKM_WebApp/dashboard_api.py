@@ -15,6 +15,10 @@ SURVEY_SCHEMA = json.loads((Path(__file__).parent/'survey_schema.json').read_tex
 def normalized_name(value):
     return ' '.join(unicodedata.normalize('NFKC',value).casefold().split())
 
+def average(values):
+    available=[value for value in values if value is not None]
+    return sum(available)/len(available) if available else None
+
 
 def initialize(connect):
     with connect() as c:
@@ -54,6 +58,13 @@ def initialize(connect):
                 activity_id INTEGER NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
                 payload TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS student_directory (
+                record_key TEXT PRIMARY KEY, nim TEXT NOT NULL DEFAULT '', nama TEXT NOT NULL DEFAULT '',
+                prodi TEXT NOT NULL DEFAULT '', fakultas TEXT NOT NULL DEFAULT '', kampus TEXT NOT NULL DEFAULT ''
+            );
+            CREATE TABLE IF NOT EXISTS pending_surveys (
+                record_key TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), payload TEXT NOT NULL
+            );
         ''')
 
 
@@ -63,14 +74,14 @@ class Input(BaseModel):
 
 class Student(Input):
     nim: str = Field(min_length=6, max_length=30, pattern=r'^\d+$')
-    nama: str = Field(min_length=1, max_length=200)
+    nama: str = Field(default='', max_length=200)
     prodi: str = Field(default='', max_length=200)
     fakultas: str = Field(default='', max_length=200)
     kampus: str = Field(default='', max_length=200)
 
 
 class Survey(Input):
-    tanggalSurvey: datetime.date
+    tanggalSurvey: datetime.date | None = None
     nim: str = Field(default='', max_length=30)
     nama: str = Field(default='', max_length=200)
     fakultas: str = Field(default='', max_length=200)
@@ -79,7 +90,7 @@ class Survey(Input):
     skorNarasumber: float | None = Field(default=None, ge=1, le=5)
     skorFasilitas: float | None = Field(default=None, ge=1, le=5)
     skorDampakKarakter: float | None = Field(default=None, ge=1, le=5)
-    answers: list[float] | None = Field(default=None, min_length=20, max_length=20)
+    answers: list[float | None] | None = Field(default=None, min_length=20, max_length=20)
     instrument: str = Field(default='', max_length=50)
     submittedAt: str = Field(default='', max_length=100)
     sourceKey: str = Field(default='', max_length=100)
@@ -90,37 +101,37 @@ class Survey(Input):
     @model_validator(mode='after')
     def scores(self):
         if self.answers is not None:
-            if any(not 1 <= answer <= 5 for answer in self.answers):
-                raise ValueError('Semua 20 jawaban wajib berupa angka 1–5')
+            if any(answer is not None and not 1 <= answer <= 5 for answer in self.answers):
+                raise ValueError('Jawaban yang terisi wajib berupa angka 1–5')
             for group in SURVEY_SCHEMA['groups']:
-                setattr(self,group['field'],sum(self.answers[i-1] for i in group['items'])/len(group['items']))
-            self.skorTotal=sum(self.answers)/20
+                setattr(self,group['field'],average(self.answers[i-1] for i in group['items']))
+            self.skorTotal=average(self.answers)
             self.instrument=SURVEY_SCHEMA['version']
         else:
             values=[self.skorMateri,self.skorNarasumber,self.skorFasilitas,self.skorDampakKarakter]
-            if any(value is None for value in values):
-                raise ValueError('Isi semua 20 jawaban survei atau keempat skor format lama')
-            self.skorTotal=sum(values)/4
+            self.skorTotal=average(values)
             self.skorKepuasan=None
             self.instrument='legacy-4'
         return self
 
 
 class DashboardActivity(Input):
-    namaKegiatan: str = Field(min_length=3, max_length=200)
-    tanggal: datetime.date
-    jumlahPeserta: int = Field(default=0, ge=0, le=10000000)
+    namaKegiatan: str = Field(default='', max_length=200)
+    tanggal: datetime.date | None = None
+    tahun: str = Field(default='',pattern=r'^(\d{4})?$',max_length=4)
+    sourceKey: str = Field(default='',max_length=100)
+    jumlahPeserta: int | None = Field(default=None, ge=0, le=10000000)
     linkEvident: str = Field(default='', max_length=2000)
     tempat: str = Field(default='', max_length=500)
     unitKerjasama: str = Field(default='', max_length=500)
     urusan: str = Field(default='Pengembangan karakter', max_length=200)
     program: Literal['Pengembangan Karakter', 'Asrama'] = 'Pengembangan Karakter'
-    kategori: str = Field(min_length=1, max_length=100)
+    kategori: str = Field(default='', max_length=100)
     jenis: str = Field(default='', max_length=200)
     pembicara: str = Field(default='', max_length=500)
     honor: str = Field(default='', max_length=100)
-    takPanitia: int = Field(default=10, ge=0, le=10000)
-    takPeserta: int = Field(default=5, ge=0, le=10000)
+    takPanitia: int | None = Field(default=None, ge=0, le=10000)
+    takPeserta: int | None = Field(default=None, ge=0, le=10000)
     laporan: str = Field(default='', max_length=20000)
     targetSurveyKepuasan: float | None = Field(default=None, ge=1, le=5)
     evaluasiMateri: str = Field(default='', max_length=100)
@@ -160,14 +171,35 @@ class ActivityMigration(Input):
 
 
 class SurveyMigrationRow(Input):
-    activityId: int = Field(gt=0)
+    activityId: int | None = Field(default=None,gt=0)
     namaKegiatan: str = Field(default='',max_length=200)
+    tanggalKegiatan: str = Field(default='',max_length=10)
+    importKey: str = Field(default='',max_length=100)
+    unresolved: str = Field(default='',max_length=1000)
     sourceRow: int = Field(default=0,ge=0)
     response: Survey
 
 
 class SurveyMigration(Input):
     items: list[SurveyMigrationRow] = Field(min_length=1,max_length=10000)
+
+
+class DirectoryStudent(Input):
+    directoryId: str = Field(default='',max_length=120)
+    nim: str = Field(default='',max_length=30,pattern=r'^(\d{6,30})?$')
+    nama: str = Field(default='',max_length=200)
+    prodi: str = Field(default='',max_length=200)
+    fakultas: str = Field(default='',max_length=200)
+    kampus: str = Field(default='',max_length=200)
+    sourceKey: str = Field(default='',max_length=100)
+
+
+class StudentMigration(Input):
+    items: list[DirectoryStudent] = Field(min_length=1,max_length=10000)
+
+
+class ResolveSurvey(Input):
+    activityId: int = Field(gt=0)
 
 
 def register(app, connect, auth, allow, audit, hash_password, check_password):
@@ -180,22 +212,22 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
 
     def converted(row, details, responses):
         data = dict(row)
-        date = datetime.date.fromisoformat(data['tanggal'])
+        date = datetime.date.fromisoformat(data['tanggal']) if data['tanggal'] else None
         result = dict(id=data['id'], namaKegiatan=data['nama_kegiatan'], tanggal=data['tanggal'],
                       program=data['program'], kategori=data['kategori'], tempat=data['tempat'],
                       unitKerjasama=data['unit_kerjasama'], pembicara=data['pembicara'],
                       jumlahPeserta=data['jumlah_peserta'], laporan=data['laporan'],
                       linkEvident=data['link_eviden'], urusan=data['program'], jenis=data['kategori'],
-                      honor='', takPanitia=10, takPeserta=5, targetSurveyKepuasan=None,
+                      honor='', takPanitia=None, takPeserta=None, targetSurveyKepuasan=None,
                       evaluasiMateri='', evaluasiNarasumber='', evaluasiFasilitas='', evaluasiDampak='', catatanSurvey='')
         extras = details.get(data['id'], {})
         for key in ('jenis','honor','takPanitia','takPeserta','targetSurveyKepuasan','evaluasiMateri',
-                    'evaluasiNarasumber','evaluasiFasilitas','evaluasiDampak','catatanSurvey','urusan'):
+                    'evaluasiNarasumber','evaluasiFasilitas','evaluasiDampak','catatanSurvey','urusan','jumlahPeserta','sourceKey'):
             if key in extras:
                 result[key] = extras[key]
-        result.update(id=data['id'], tahun=str(date.year), triwulan=f'TW{(date.month-1)//3+1}')
+        result.update(id=data['id'], tahun=str(date.year) if date else extras.get('tahun',''), triwulan=f'TW{(date.month-1)//3+1}' if date else '')
         full = [r for r in responses if r.get('answers') is not None]
-        scores = [r.get('skorTotal') or sum(r[k] for k in ('skorMateri','skorNarasumber','skorFasilitas','skorDampakKarakter'))/4 for r in (full or responses)]
+        scores = [r.get('skorTotal') for r in (full or responses) if r.get('skorTotal') is not None]
         legacy = [data[k] for k in ('skor_materi', 'skor_narasumber', 'skor_fasilitas', 'skor_dampak') if data.get(k) is not None]
         result['skorSurvey'] = round(sum(scores)/len(scores), 2) if scores else (round(sum(legacy)/len(legacy), 2) if legacy else result.get('targetSurveyKepuasan'))
         return result
@@ -218,12 +250,19 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
                 survey['namaKegiatan'] = names[survey['activityId']]
             students = [dict(r) for r in c.execute('''SELECT s.*,p.activity_id AS activityId
                 FROM activity_participants p JOIN students s ON s.nim=p.nim''') if r['activityId'] in ids]
+            master=[]
+            if user['role'] in ('admin','operator'):
+                directory=[dict(r) for r in c.execute('SELECT * FROM student_directory ORDER BY nama,record_key')]
+                known={row['nim'] for row in directory if row['nim']}
+                master=[dict(row,directoryId=row['record_key']) for row in directory]
+                master.extend(dict(row,directoryId='nim:'+row['nim']) for row in c.execute('SELECT * FROM students') if row['nim'] not in known)
+            pending=[dict(id=row['record_key'],**json.loads(row['payload'])) for row in c.execute('SELECT * FROM pending_surveys WHERE user_id=?',(user['id'],))]
             users = []
             if user['role'] == 'admin':
                 users = [dict(id=r['id'], username=r['username'], nama=r['full_name'], email=r['email'],
                               role=r['dashboard_role'] or r['role'], status='Aktif' if r['active'] else 'Nonaktif')
                          for r in c.execute('SELECT * FROM users ORDER BY id')]
-            return dict(activities=activities, students=students, surveys=surveys, adminList=users, profile=profile(user))
+            return dict(activities=activities, students=students, masterStudents=master,pendingSurveys=pending,surveys=surveys, adminList=users, profile=profile(user))
 
     def write_surveys(c, ident, surveys, user, notes=''):
         previous = c.execute('SELECT count(*) FROM survey_responses WHERE activity_id=?', (ident,)).fetchone()[0]
@@ -232,7 +271,7 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             c.execute('INSERT INTO survey_responses(activity_id,payload) VALUES(?,?)', (ident,json.dumps(survey.model_dump(mode='json'))))
         if surveys:
             measured=[s for s in surveys if s.answers is not None] or surveys
-            means = [sum(getattr(s,k) for s in measured)/len(measured) for k in ('skorMateri','skorNarasumber','skorFasilitas','skorDampakKarakter')]
+            means = [average(getattr(s,k) for s in measured) for k in ('skorMateri','skorNarasumber','skorFasilitas','skorDampakKarakter')]
             c.execute('''INSERT INTO evaluations(activity_id,jumlah_responden,skor_materi,skor_narasumber,skor_fasilitas,skor_dampak,temuan,updated_by)
                 VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(activity_id) DO UPDATE SET jumlah_responden=excluded.jumlah_responden,
                 skor_materi=excluded.skor_materi,skor_narasumber=excluded.skor_narasumber,skor_fasilitas=excluded.skor_fasilitas,
@@ -258,11 +297,11 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             if not old:
                 raise HTTPException(404, 'Kegiatan tidak ditemukan')
             allow(user, old['program'])
-        values = (data.namaKegiatan, data.tanggal.isoformat(), data.program, data.kategori, data.tempat,
-                  data.unitKerjasama, data.pembicara, data.jumlahPeserta, data.laporan, data.linkEvident)
+        values = (data.namaKegiatan, data.tanggal.isoformat() if data.tanggal else '', data.program, data.kategori, data.tempat,
+                  data.unitKerjasama, data.pembicara, data.jumlahPeserta or 0, data.laporan, data.linkEvident)
         if ident is None:
             cur = c.execute('''INSERT INTO activities(nama_kegiatan,tanggal,program,kategori,tempat,unit_kerjasama,
-                pembicara,jumlah_peserta,laporan,link_eviden,status,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''', values+('Terlaksana',user['id']))
+                pembicara,jumlah_peserta,laporan,link_eviden,status,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''', values+('Terlaksana' if data.namaKegiatan and data.tanggal else 'Draft',user['id']))
             ident = cur.lastrowid
         else:
             c.execute('''UPDATE activities SET nama_kegiatan=?,tanggal=?,program=?,kategori=?,tempat=?,unit_kerjasama=?,
@@ -272,7 +311,7 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
         c.execute('DELETE FROM activity_participants WHERE activity_id=?', (ident,))
         for student in participants.values():
             c.execute('''INSERT INTO students VALUES(?,?,?,?,?) ON CONFLICT(nim) DO UPDATE SET
-                nama=excluded.nama,
+                nama=CASE WHEN excluded.nama<>'' THEN excluded.nama ELSE students.nama END,
                 prodi=CASE WHEN excluded.prodi<>'' THEN excluded.prodi ELSE students.prodi END,
                 fakultas=CASE WHEN excluded.fakultas<>'' THEN excluded.fakultas ELSE students.fakultas END,
                 kampus=CASE WHEN excluded.kampus<>'' THEN excluded.kampus ELSE students.kampus END''',
@@ -286,6 +325,39 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
     def create(data: DashboardActivity, user=Depends(auth)):
         return save(data,user)
 
+    @app.post('/api/migrate/students')
+    def migrate_students(data: StudentMigration, user=Depends(auth)):
+        if user['role'] not in ('admin','operator'):
+            raise HTTPException(403,'Master mahasiswa hanya dikelola Super Admin atau Operator KKA')
+        created=updated=skipped=0
+        fields=('nim','nama','prodi','fakultas','kampus')
+        with connect() as c:
+            c.execute('BEGIN IMMEDIATE')
+            for student in data.items:
+                values={field:getattr(student,field) for field in fields}
+                if not any(values.values()):
+                    skipped+=1
+                    continue
+                specified=c.execute('SELECT * FROM student_directory WHERE record_key=?',(student.directoryId,)).fetchone() if student.directoryId else None
+                if student.directoryId and not specified:raise HTTPException(422,'ID Master tidak ditemukan; gunakan ID dari ekspor master aplikasi ini')
+                record_key='nim:'+student.nim if student.nim else student.directoryId or 'source:'+(student.sourceKey or hashlib.sha256(json.dumps(values,sort_keys=True).encode()).hexdigest())
+                existing=c.execute('SELECT * FROM student_directory WHERE record_key=?',(record_key,)).fetchone()
+                cached=c.execute('SELECT * FROM students WHERE nim=?',(student.nim,)).fetchone() if student.nim else None
+                previous=existing or specified or cached
+                merged={field:values[field] or next((row[field] for row in (existing,specified,cached) if row and row[field]),'') for field in fields}
+                if previous and all(previous[field]==merged[field] for field in fields):skipped+=1
+                elif previous:updated+=1
+                else:created+=1
+                c.execute('''INSERT INTO student_directory VALUES(?,?,?,?,?,?) ON CONFLICT(record_key) DO UPDATE SET
+                    nim=excluded.nim,nama=excluded.nama,prodi=excluded.prodi,fakultas=excluded.fakultas,kampus=excluded.kampus''',
+                    (record_key,*(merged[field] for field in fields)))
+                if specified and specified['record_key']!=record_key:c.execute('DELETE FROM student_directory WHERE record_key=?',(specified['record_key'],))
+                if student.nim:
+                    c.execute('''INSERT INTO students VALUES(?,?,?,?,?) ON CONFLICT(nim) DO UPDATE SET
+                        nama=excluded.nama,prodi=excluded.prodi,fakultas=excluded.fakultas,kampus=excluded.kampus''',tuple(merged[field] for field in fields))
+            audit(c,user,'migrate_students','migration',None)
+        return {'created':created,'updated':updated,'skipped':skipped}
+
     @app.post('/api/migrate/activities')
     def migrate_activities(data: ActivityMigration, user=Depends(auth)):
         for item in data.items:
@@ -295,10 +367,20 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
         created=skipped=0
         with connect() as c:
             c.execute('BEGIN IMMEDIATE')
-            keys={(normalized_name(row['nama_kegiatan']),row['tanggal'],row['program'])
-                  for row in c.execute('SELECT nama_kegiatan,tanggal,program FROM activities')}
+            details={row['activity_id']:json.loads(row['payload']) for row in c.execute('SELECT * FROM activity_details')}
+            def activity_key(name,date,program,year,source):
+                if name and (date or year):
+                    return ('named',normalized_name(name),date,program,year)
+                return ('source',source)
+            keys=set()
+            for row in c.execute('SELECT id,nama_kegiatan,tanggal,program FROM activities'):
+                extra=details.get(row['id'],{})
+                keys.add(activity_key(row['nama_kegiatan'],row['tanggal'],row['program'],row['tanggal'][:4] or extra.get('tahun',''),extra.get('sourceKey','existing:'+str(row['id']))))
             for item in data.items:
-                key=(normalized_name(item.namaKegiatan),item.tanggal.isoformat(),item.program)
+                date=item.tanggal.isoformat() if item.tanggal else ''
+                source=item.sourceKey or hashlib.sha256(item.model_dump_json().encode()).hexdigest()
+                item.sourceKey=source
+                key=activity_key(item.namaKegiatan,date,item.program,date[:4] or item.tahun,source)
                 if key in keys:
                     skipped+=1
                     continue
@@ -308,26 +390,33 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             audit(c,user,'migrate_activities','migration',None)
         return {'created':created,'skipped':skipped}
 
+    def survey_key(response):
+        record=response.model_dump(mode='json')
+        # Metadata spelling changes do not create a second response for the same NIM.
+        identity={k:record[k] for k in ('tanggalSurvey','submittedAt','nim','answers','saran')}
+        if not response.nim:
+            identity['nama']=normalized_name(response.nama)
+            if not response.submittedAt:
+                identity['sourceKey']=response.sourceKey
+        if response.answers is None:
+            identity['scores']=[response.skorMateri,response.skorNarasumber,response.skorFasilitas,response.skorDampakKarakter]
+        return hashlib.sha256(json.dumps(identity,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+
     @app.post('/api/migrate/surveys')
     def migrate_surveys(data: SurveyMigration, user=Depends(auth)):
         if user['role']=='viewer':
             raise HTTPException(403,'Akses baca saja')
-        def key(response):
-            record=response.model_dump(mode='json')
-            # Metadata spelling changes do not create a second response for the same NIM.
-            identity={k:record[k] for k in ('tanggalSurvey','submittedAt','nim','answers','saran')}
-            if not response.nim:
-                identity['nama']=normalized_name(response.nama)
-                if not response.submittedAt:
-                    identity['sourceKey']=response.sourceKey
-            if response.answers is None:
-                identity['scores']=[response.skorMateri,response.skorNarasumber,response.skorFasilitas,response.skorDampakKarakter]
-            return hashlib.sha256(json.dumps(identity,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
-        created=skipped=0
+        created=skipped=pending_count=0
         with connect() as c:
             c.execute('BEGIN IMMEDIATE')
             grouped={}
             for item in data.items:
+                if item.activityId is None:
+                    payload=item.model_dump(mode='json')
+                    record_key=hashlib.sha256((str(user['id'])+':'+(item.importKey or json.dumps(payload,sort_keys=True))).encode()).hexdigest()
+                    c.execute('INSERT INTO pending_surveys VALUES(?,?,?) ON CONFLICT(record_key) DO NOTHING',(record_key,user['id'],json.dumps(payload)))
+                    pending_count+=1
+                    continue
                 row=c.execute('SELECT nama_kegiatan,program FROM activities WHERE id=?',(item.activityId,)).fetchone()
                 if not row or not visible(user,row['program']):
                     raise HTTPException(422,f'Baris {item.sourceRow}: kegiatan tidak ditemukan atau tidak dapat diakses')
@@ -336,10 +425,10 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
                 grouped.setdefault(item.activityId,[]).append(item.response)
             for ident, imported in grouped.items():
                 existing=[Survey.model_validate_json(row['payload']) for row in c.execute('SELECT payload FROM survey_responses WHERE activity_id=?',(ident,))]
-                keys={key(response) for response in existing}
+                keys={survey_key(response) for response in existing}
                 additions=[]
                 for response in imported:
-                    fingerprint=key(response)
+                    fingerprint=survey_key(response)
                     if fingerprint in keys:
                         skipped+=1
                         continue
@@ -349,7 +438,24 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
                 if additions:
                     write_surveys(c,ident,existing+additions,user)
             audit(c,user,'migrate_surveys','migration',None)
-        return {'created':created,'skipped':skipped,'activities':len(grouped)}
+        return {'created':created,'skipped':skipped,'pending':pending_count,'activities':len(grouped)}
+
+    @app.post('/api/migrate/surveys/pending/{record_key}/resolve')
+    def resolve_pending(record_key: str, data: ResolveSurvey, user=Depends(auth)):
+        if user['role']=='viewer':raise HTTPException(403,'Akses baca saja')
+        with connect() as c:
+            c.execute('BEGIN IMMEDIATE')
+            pending=c.execute('SELECT * FROM pending_surveys WHERE record_key=? AND user_id=?',(record_key,user['id'])).fetchone()
+            target=c.execute('SELECT * FROM activities WHERE id=?',(data.activityId,)).fetchone()
+            if not pending:raise HTTPException(404,'Data tertunda tidak ditemukan')
+            if not target or not visible(user,target['program']):raise HTTPException(403,'Kegiatan tidak dapat diakses')
+            response=SurveyMigrationRow.model_validate_json(pending['payload']).response
+            existing=[Survey.model_validate_json(row['payload']) for row in c.execute('SELECT payload FROM survey_responses WHERE activity_id=?',(data.activityId,))]
+            duplicate=survey_key(response) in {survey_key(item) for item in existing}
+            if not duplicate:write_surveys(c,data.activityId,existing+[response],user)
+            c.execute('DELETE FROM pending_surveys WHERE record_key=?',(record_key,))
+            audit(c,user,'resolve_survey','activity',data.activityId)
+        return {'created':0 if duplicate else 1,'skipped':1 if duplicate else 0}
 
     @app.put('/api/dashboard/activities/{ident}')
     def update(ident: int, data: DashboardActivity, user=Depends(auth)):

@@ -68,8 +68,8 @@ def main():
                 expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
                 print('PASS: real login rejects wrong password and accepts stored account')
                 page.get_by_role('button',name='Laporan',exact=False).first.click()
-                page.get_by_label('Nama Kegiatan *',exact=True).fill('Kegiatan Uji Browser')
-                page.get_by_label('Tanggal Kegiatan *',exact=True).fill('2026-11-04')
+                page.get_by_label('Nama Kegiatan',exact=True).fill('Kegiatan Uji Browser')
+                page.get_by_label('Tanggal Kegiatan',exact=True).fill('2026-11-04')
                 page.get_by_label('Honor Pembicara (Rp)',exact=True).fill('Rp 250.000')
                 with page.expect_download() as participant_template:
                     page.get_by_role('button',name='Unduh Template',exact=True).click()
@@ -92,14 +92,14 @@ def main():
                 with page.expect_download() as survey_template:
                     page.get_by_role('button',name='Template Survey',exact=True).click()
                 page.get_by_label('Berkas survei kegiatan',exact=True).set_input_files(survey_template.value.path())
-                expect(page.get_by_role('status')).to_contain_text('Pertanyaan 1 wajib')
-                print('PASS: blank satisfaction template has no fabricated scores and must be completed')
+                expect(page.get_by_role('status')).to_contain_text('1 respons survei siap disimpan.')
+                print('PASS: blank satisfaction answers are accepted as null without fabricated scores')
                 survey = b'tanggalSurvey,NIM,skorMateri,skorNarasumber,skorFasilitas,skorDampak,Saran\n2026-11-04,123456789012,4,5,3,4,Uji browser\n'
                 page.get_by_label('Berkas survei kegiatan',exact=True).set_input_files({'name':'survei.csv','mimeType':'text/csv','buffer':survey})
                 expect(page.get_by_text('1 respons survei siap disimpan.',exact=True)).to_be_visible()
                 page.get_by_role('button',name='Simpan & Publikasikan Kegiatan').click()
                 expect(page.get_by_text('Kegiatan berhasil disimpan di server.',exact=True)).to_be_visible()
-                expect(page.locator('tbody tr').first).to_contain_text('Kegiatan Uji Browser')
+                expect(page.get_by_role('region',name='Daftar kegiatan tersimpan',exact=True).locator('tbody tr').first).to_contain_text('Kegiatan Uji Browser')
                 recap=page.get_by_role('region',name='Rekap mahasiswa tersimpan',exact=True)
                 expect(recap).to_contain_text('Peserta Uji')
                 expect(recap).to_contain_text('123456789012')
@@ -203,12 +203,12 @@ def main():
                 print('PASS: reload retains data and real charts; search and quarter filters update metrics')
                 page.get_by_role('button',name='Laporan',exact=False).first.click()
                 page.get_by_role('button',name='Edit',exact=True).first.click()
-                expect(page.get_by_label('Nama Kegiatan *',exact=True)).to_have_value('Kegiatan Uji Browser')
+                expect(page.get_by_label('Nama Kegiatan',exact=True)).to_have_value('Kegiatan Uji Browser')
                 expect(page.get_by_label('Honor Pembicara (Rp)',exact=True)).to_have_value('Rp 250.000')
-                page.get_by_label('Nama Kegiatan *',exact=True).fill('Kegiatan Uji Diedit')
+                page.get_by_label('Nama Kegiatan',exact=True).fill('Kegiatan Uji Diedit')
                 page.get_by_role('button',name='Simpan & Publikasikan Kegiatan').click()
                 expect(page.get_by_text('Kegiatan berhasil disimpan di server.',exact=True)).to_be_visible()
-                expect(page.locator('tbody tr').first).to_contain_text('Kegiatan Uji Diedit')
+                expect(page.get_by_role('region',name='Daftar kegiatan tersimpan',exact=True).locator('tbody tr').first).to_contain_text('Kegiatan Uji Diedit')
                 page.screenshot(path=str(ARTIFACTS/'laporan.png'),full_page=True)
                 print('PASS: edit activity preserves participants, survey, and extra fields')
                 os.killpg(process.pid,signal.SIGTERM)
@@ -312,15 +312,90 @@ def main():
                 print('PASS: unchanged 20-question template/export, name matching, raw answers and idempotent survey migration')
                 bad=io.StringIO();bad_writer=csv_tools.writer(bad);bad_writer.writerow(headers);bad_writer.writerow(['Kegiatan Tidak Ada',*rows[0][1:]])
                 migration.get_by_label('File migrasi hasil survei',exact=True).set_input_files({'name':'salah-kegiatan.csv','mimeType':'text/csv','buffer':bad.getvalue().encode()})
-                expect(migration).to_contain_text('tidak ditemukan atau tidak sesuai pilihan')
-                expect(migration.get_by_role('button',name='Migrasikan 1 Respons Survei',exact=True)).to_be_disabled()
+                expect(migration).to_contain_text('1 respons belum cocok')
+                expect(migration.get_by_role('button',name='Migrasikan 1 Respons Survei',exact=True)).to_be_enabled()
                 with page.expect_download() as migrated_pdf:
                     page.get_by_role('button',name='Unduh PDF',exact=True).click()
                 pdf_text=' '.join(p.extract_text() for p in PdfReader(migrated_pdf.value.path()).pages)
                 assert 'meningkatkan pemahaman saya' in pdf_text
                 assert 'Webinar Migrasi A' in pdf_text
                 page.screenshot(path=str(ARTIFACTS/'migrasi-survei.png'),full_page=True)
-                print('PASS: wrong activity is blocked and PDF includes satisfaction question analysis')
+                print('PASS: unmatched activity is preserved for later matching and PDF includes question analysis')
+                with page.expect_download() as master_template:
+                    migration.get_by_role('button',name='Template Master Mahasiswa',exact=True).click()
+                assert master_template.value.suggested_filename=='Template_Master_Mahasiswa.xlsx'
+                master_file={'name':'master.csv','mimeType':'text/csv','buffer':b'NIM,Nama Mahasiswa,Program Studi,Fakultas,Kampus\n000000000707,Master Baru,Informatika,,\n,Tanpa NIM UI,,,\n000000000708,,,FIF,\n'}
+                migration.get_by_label('File database master mahasiswa',exact=True).set_input_files(master_file)
+                expect(migration).to_contain_text('3 baris master mahasiswa siap diimpor')
+                migration.get_by_role('button',name='Impor 3 Master Mahasiswa',exact=True).click()
+                expect(migration).to_contain_text('3 ditambahkan, 0 diperbarui')
+                master=page.get_by_role('region',name='Database master mahasiswa tersimpan',exact=True)
+                master.get_by_label('Cari mahasiswa dalam rekap',exact=True).fill('Tanpa NIM UI')
+                expect(master.locator('tbody tr')).to_have_count(1)
+                expect(master.locator('tbody tr')).to_contain_text('Belum diisi')
+                with page.expect_download() as master_export:
+                    master.get_by_role('button',name='Ekspor Master Mahasiswa',exact=True).click()
+                assert master_export.value.suggested_filename=='Database_Master_Mahasiswa_PKKM.xlsx'
+                migration.get_by_label('File database master mahasiswa',exact=True).set_input_files(master_file)
+                expect(migration).to_contain_text('3 baris master mahasiswa siap diimpor')
+                migration.get_by_role('button',name='Impor 3 Master Mahasiswa',exact=True).click()
+                expect(migration).to_contain_text('0 ditambahkan, 0 diperbarui, 3 tanpa perubahan')
+                snapshot=page.request.get(url+'/api/dashboard',headers=auth).json()
+                assert len(snapshot['activities'])==3
+                assert len(snapshot['students'])==1
+                assert any(s['nama']=='Tanpa NIM UI' and s['nim']=='' for s in snapshot['masterStudents'])
+                print('PASS: master import, missing NIM/name, deduplication and export without changing attendance')
+                with page.expect_download() as year_template:
+                    migration.get_by_role('button',name='Template Migrasi Kegiatan',exact=True).click()
+                check_year='''import * as XLSX from 'xlsx'; import fs from 'node:fs';
+                    const book=XLSX.read(fs.readFileSync(process.argv[1]),{type:'buffer'});
+                    const headers=XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1})[0];
+                    if(!headers.includes('Tahun'))process.exit(1);'''
+                subprocess.run(['node','--input-type=module','-e',check_year,year_template.value.path()],cwd=ROOT,check=True)
+                migration.get_by_label('File migrasi kegiatan',exact=True).set_input_files({'name':'tahun-saja.csv','mimeType':'text/csv','buffer':b'Nama Kegiatan,Tahun,Tempat\nArsip Tanpa Tanggal,2023,Zoom\n'})
+                expect(migration).to_contain_text('1 baris kegiatan siap dimigrasikan')
+                migration.get_by_role('button',name='Migrasikan 1 Kegiatan',exact=True).click()
+                expect(migration).to_contain_text('1 ditambahkan, 0 duplikat dilewati')
+                snapshot=page.request.get(url+'/api/dashboard',headers=auth).json()
+                archive=next(a for a in snapshot['activities'] if a['namaKegiatan']=='Arsip Tanpa Tanggal')
+                assert archive['tahun']=='2023' and archive['tanggal']=='' and archive['jumlahPeserta'] is None
+                activity_list=page.get_by_role('region',name='Daftar kegiatan tersimpan',exact=True)
+                activity_list.locator('tbody tr').filter(has_text='Arsip Tanpa Tanggal').get_by_role('button',name='Edit',exact=True).click()
+                expect(page.get_by_label('Tanggal Kegiatan',exact=True)).to_have_value('')
+                expect(page.get_by_label('Triwulan kegiatan',exact=True)).to_have_value('')
+                page.get_by_label('Honor Pembicara (Rp)',exact=True).fill('Rp 100.000')
+                page.get_by_role('button',name='Simpan & Publikasikan Kegiatan',exact=True).click()
+                expect(page.get_by_text('Kegiatan berhasil disimpan di server.',exact=True)).to_be_visible()
+                snapshot=page.request.get(url+'/api/dashboard',headers=auth).json()
+                archive=next(a for a in snapshot['activities'] if a['namaKegiatan']=='Arsip Tanpa Tanggal')
+                assert archive['tahun']=='2023' and archive['tanggal']=='' and archive['jumlahPeserta'] is None
+                print('PASS: activity template has Tahun; year-only migration and edit preserve unknown date/count')
+                partial=io.StringIO();partial_writer=csv_tools.writer(partial)
+                partial_writer.writerow(['Nama Kegiatan','Tanggal Survey','NIM',schema['questions'][0],schema['questions'][1]])
+                partial_writer.writerow(['','','000000000303',5,''])
+                migration.get_by_label('File migrasi hasil survei',exact=True).set_input_files({'name':'survei-kosong.csv','mimeType':'text/csv','buffer':partial.getvalue().encode()})
+                expect(migration).to_contain_text('1 respons belum cocok')
+                migration.get_by_role('button',name='Migrasikan 1 Respons Survei',exact=True).click()
+                expect(migration).to_contain_text('1 respons disimpan untuk dicocokkan')
+                pending_region=page.get_by_label('Survei perlu dicocokkan',exact=True)
+                target=next(a['id'] for a in snapshot['activities'] if a['namaKegiatan']=='Webinar Migrasi A')
+                pending_region.locator('select').select_option(str(target))
+                pending_region.get_by_role('button',name='Hubungkan Survei',exact=True).click()
+                expect(migration).to_contain_text('Survei berhasil dihubungkan. Nilai kosong tetap kosong.')
+                snapshot=page.request.get(url+'/api/dashboard',headers=auth).json()
+                partial_record=next(s for s in snapshot['surveys'] if s['nim']=='000000000303')
+                assert partial_record['tanggalSurvey'] is None
+                assert partial_record['answers']==[5]+[None]*19
+                assert partial_record['skorTotal']==5
+                assert snapshot['pendingSurveys']==[]
+                with page.expect_download() as nullable_pdf:
+                    page.get_by_role('button',name='Unduh PDF',exact=True).click()
+                assert len(PdfReader(nullable_pdf.value.path()).pages)>0
+                page.reload()
+                expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
+                snapshot=page.request.get(url+'/api/dashboard',headers=auth).json()
+                assert any(s['nama']=='Tanpa NIM UI' and s['nim']=='' for s in snapshot['masterStudents'])
+                print('PASS: partial/undated survey stored pending then linked without fabricated scores; PDF and reload succeed')
                 assert not errors, errors
                 print('PASS: mobile navigation; no browser JavaScript errors')
                 browser.close()

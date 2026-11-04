@@ -115,11 +115,11 @@ def activities(program:str='',year:str='',status:str='',u=Depends(auth)):
         program=permitted
     clauses=[];args=[]
     if program:clauses.append('a.program=?');args.append(program)
-    if year:clauses.append("substr(a.tanggal,1,4)=?");args.append(year)
+    if year:clauses.append("(substr(a.tanggal,1,4)=? OR (a.tanggal='' AND json_extract(d.payload,'$.tahun')=?))");args.extend([year,year])
     if status:clauses.append('a.status=?');args.append(status)
     where='WHERE '+' AND '.join(clauses) if clauses else ''
     with connect() as c:
-        rows=c.execute(f'''SELECT a.*,e.jumlah_responden,e.skor_materi,e.skor_narasumber,e.skor_fasilitas,e.skor_dampak,e.temuan,e.rekomendasi FROM activities a LEFT JOIN evaluations e ON e.activity_id=a.id {where} ORDER BY a.tanggal DESC,a.id DESC''',args).fetchall()
+        rows=c.execute(f'''SELECT a.*,e.jumlah_responden,e.skor_materi,e.skor_narasumber,e.skor_fasilitas,e.skor_dampak,e.temuan,e.rekomendasi FROM activities a LEFT JOIN evaluations e ON e.activity_id=a.id LEFT JOIN activity_details d ON d.activity_id=a.id {where} ORDER BY a.tanggal DESC,a.id DESC''',args).fetchall()
     return [dict(x) for x in rows]
 @app.post('/api/activities',status_code=201)
 def create_activity(data:Activity,u=Depends(auth)):
@@ -173,7 +173,7 @@ def summary(program:str='',year:str='',u=Depends(auth)):
     rows=activities(program,year,'',u)
     done=[r for r in rows if r['status']!='Draft']
     scored=[r for r in done if r['skor_dampak'] is not None]
-    return {'total':len(rows),'terlaksana':len(done),'dievaluasi':sum(r['status']=='Dievaluasi' for r in rows),'peserta':sum(r['jumlah_peserta'] for r in done),'target_peserta':sum(r['target_peserta'] for r in done),'anggaran':sum(r['anggaran'] for r in rows),'realisasi':sum(r['realisasi'] for r in rows),'rerata_dampak':round(sum(r['skor_dampak'] for r in scored)/len(scored),2) if scored else None,'by_program':{p:sum(r['program']==p for r in rows) for p in ('Pengembangan Karakter','Asrama')},'by_quarter':{f'TW{i}':sum((int(r['tanggal'][5:7])-1)//3+1==i for r in rows) for i in range(1,5)}}
+    return {'total':len(rows),'terlaksana':len(done),'dievaluasi':sum(r['status']=='Dievaluasi' for r in rows),'peserta':sum(r['jumlah_peserta'] for r in done),'target_peserta':sum(r['target_peserta'] for r in done),'anggaran':sum(r['anggaran'] for r in rows),'realisasi':sum(r['realisasi'] for r in rows),'rerata_dampak':round(sum(r['skor_dampak'] for r in scored)/len(scored),2) if scored else None,'by_program':{p:sum(r['program']==p for r in rows) for p in ('Pengembangan Karakter','Asrama')},'by_quarter':{f'TW{i}':sum((int(r['tanggal'][5:7])-1)//3+1==i for r in rows if len(r['tanggal'])>=10) for i in range(1,5)}}
 
 @app.get('/api/report.csv')
 def report_csv(program:str='',year:str='',u=Depends(auth)):

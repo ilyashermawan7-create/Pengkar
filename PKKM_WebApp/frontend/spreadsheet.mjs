@@ -27,7 +27,8 @@ export async function readSpreadsheet(file, kind='survey') {
     const index = rows.findIndex((row,i) => {
       if(i>=30)return false;
       const headers=row.map(canonical);
-      if(kind==='activities')return headers.includes('namakegiatan')&&headers.some(h=>['tanggal','tanggalkegiatan','tanggalpelaksanaan'].includes(h));
+      if(kind==='activities')return headers.includes('namakegiatan')&&headers.some(h=>['tanggal','tanggalkegiatan','tanggalpelaksanaan','tahun','tahunkegiatan'].includes(h));
+      if(kind==='directory')return headers.some(header=>['nim','nama','prodi','fakultas','kampus'].includes(header));
       if(kind==='participants')return headers.includes('nim')&&headers.includes('nama');
       return headers.includes('nim')||headers.includes('skormateri')||headers.includes('q01')||headers.includes('kegiataninimeningkatkanpemahamansayatentangtopikyangdibahas');
     });
@@ -63,8 +64,8 @@ export async function readParticipants(file) {
   const {data,get,rowNumber,sheetName} = await readSpreadsheet(file,'participants');
   const parsed = data.map(row => {
     const student = Object.fromEntries(['nim','nama','prodi','fakultas','kampus'].map(key=>[key,get(row,key)]));
-    if (!student.nama || !/^\d{6,30}$/.test(student.nim)) {
-      throw Error(`Baris ${rowNumber(row)}: nama wajib diisi dan NIM harus berisi 6–30 angka. Tidak ada data dari file ini yang diterapkan.`);
+    if (!/^\d{6,30}$/.test(student.nim)) {
+      throw Error(`Baris ${rowNumber(row)}: NIM peserta harus berisi 6–30 angka untuk dihubungkan ke kegiatan. Untuk data tanpa NIM, gunakan impor Database Master Mahasiswa.`);
     }
     return student;
   });
