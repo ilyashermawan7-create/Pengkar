@@ -247,3 +247,8 @@ gabungan tetap satu kegiatan dalam bulan yang sama. Bulan berbeda dihitung
 masing-masing satu kali. Grafik tidak mengubah hitungan kartu Total Kegiatan
 atau record database. Nama kosong serta tanggal kosong/tidak valid tidak
 ditebak dan jumlahnya diberi keterangan. Tabel angka tersedia di bawah grafik.
+
+Dashboard seluruh grup tidak menampilkan tabel Survei Kepuasan Kegiatan —
+Pertanyaan Asli dan Rekap Data Mahasiswa. Ringkasan analisis/CSI serta grafik
+masih tampil. Kedua komponen detail tetap tersedia di Laporan sesuai role;
+penyembunyian dashboard tidak menghapus data atau mengubah hak akses.

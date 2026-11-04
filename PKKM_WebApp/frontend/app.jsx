@@ -709,8 +709,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
 
                 </div>
 
-              <SurveySummary surveys={filteredSurveys} activities={filteredActivities} />
-              <StudentRecap rows={filteredStudents} activities={filteredActivities} />
+
               </main>
             )}
 
