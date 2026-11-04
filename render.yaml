@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: pengkar-pkkm
+    runtime: python
+    plan: starter
+    region: singapore
+    branch: work
+    rootDir: PKKM_WebApp
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-headers
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.14
+      - key: PKKM_DB_PATH
+        value: /var/data/pkkm.sqlite3
+      - key: PKKM_ADMIN_USER
+        sync: false
+      - key: PKKM_ADMIN_PASSWORD
+        sync: false
+    disk:
+      name: pkkm-data
+      mountPath: /var/data
+      sizeGB: 1
