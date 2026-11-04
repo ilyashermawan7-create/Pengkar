@@ -3,6 +3,8 @@ Requires Playwright and Chromium; uses only a temporary database.
 """
 import os
 import io
+import csv as csv_tools
+import json
 import secrets
 import shutil
 import signal
@@ -71,11 +73,11 @@ def main():
                 page.get_by_label('Honor Pembicara (Rp)',exact=True).fill('Rp 250.000')
                 with page.expect_download() as participant_template:
                     page.get_by_role('button',name='Unduh Template',exact=True).click()
-                page.locator('input[type=file]').nth(0).set_input_files(participant_template.value.path())
+                page.get_by_label('Berkas peserta kegiatan',exact=True).set_input_files(participant_template.value.path())
                 expect(page.get_by_text('1 peserta unik siap disimpan bersama kegiatan.',exact=True)).to_be_visible()
                 print('PASS: download and reimport XLSX participant template')
                 csv = b'Nama Mahasiswa,NIM / NPM,Program Studi (Prodi),Nama Fakultas,Lokasi Kampus\nPeserta Uji,123456789012,Informatika,FIF,Bandung\nPeserta Uji,123456789012,Informatika,FIF,Bandung\n'
-                page.locator('input[type=file]').nth(0).set_input_files({'name':'peserta.csv','mimeType':'text/csv','buffer':csv})
+                page.get_by_label('Berkas peserta kegiatan',exact=True).set_input_files({'name':'peserta.csv','mimeType':'text/csv','buffer':csv})
                 expect(page.get_by_text('1 peserta unik siap disimpan bersama kegiatan.',exact=True)).to_be_visible()
                 expect(page.get_by_label('Jumlah Peserta',exact=True)).to_have_value('1')
                 preview=page.get_by_label('Pratinjau peserta kegiatan',exact=True)
@@ -83,17 +85,17 @@ def main():
                 expect(preview).to_contain_text('belum disimpan')
                 expect(preview).to_contain_text('1 baris NIM duplikat digabung')
                 invalid=b'Nama Mahasiswa,NIM\nPeserta Salah,BAD\n'
-                page.locator('input[type=file]').nth(0).set_input_files({'name':'salah.csv','mimeType':'text/csv','buffer':invalid})
+                page.get_by_label('Berkas peserta kegiatan',exact=True).set_input_files({'name':'salah.csv','mimeType':'text/csv','buffer':invalid})
                 expect(page.get_by_role('alert')).to_contain_text('Baris 2')
                 expect(preview).to_contain_text('Peserta Uji')
                 print('PASS: common header aliases, visible preview and error; invalid import preserves previous draft')
                 with page.expect_download() as survey_template:
                     page.get_by_role('button',name='Template Survey',exact=True).click()
-                page.locator('input[type=file]').nth(1).set_input_files(survey_template.value.path())
-                expect(page.get_by_text('1 respons survei siap disimpan.',exact=True)).to_be_visible()
-                print('PASS: download and reimport XLSX survey template')
+                page.get_by_label('Berkas survei kegiatan',exact=True).set_input_files(survey_template.value.path())
+                expect(page.get_by_role('status')).to_contain_text('Pertanyaan 1 wajib')
+                print('PASS: blank satisfaction template has no fabricated scores and must be completed')
                 survey = b'tanggalSurvey,NIM,skorMateri,skorNarasumber,skorFasilitas,skorDampak,Saran\n2026-11-04,123456789012,4,5,3,4,Uji browser\n'
-                page.locator('input[type=file]').nth(1).set_input_files({'name':'survei.csv','mimeType':'text/csv','buffer':survey})
+                page.get_by_label('Berkas survei kegiatan',exact=True).set_input_files({'name':'survei.csv','mimeType':'text/csv','buffer':survey})
                 expect(page.get_by_text('1 respons survei siap disimpan.',exact=True)).to_be_visible()
                 page.get_by_role('button',name='Simpan & Publikasikan Kegiatan').click()
                 expect(page.get_by_text('Kegiatan berhasil disimpan di server.',exact=True)).to_be_visible()
@@ -256,6 +258,69 @@ def main():
                 page.get_by_role('button',name='Laporan',exact=False).first.click()
                 expect(page.locator('aside')).to_be_hidden()
                 page.screenshot(path=str(ARTIFACTS/'mobile.png'),full_page=True)
+                page.set_viewport_size({'width':1440,'height':1000})
+                migration=page.get_by_role('region',name='Migrasi data kegiatan dan survei',exact=True)
+                activity_csv=b'Nama Kegiatan,Tanggal Kegiatan,Program,Kategori,Jumlah Peserta\nWebinar Migrasi A,2024-02-21,Pengembangan Karakter,Webinar,3\nWebinar Migrasi B,2024-03-01,Pengembangan Karakter,Webinar,5\n'
+                activity_file={'name':'kegiatan-migrasi.csv','mimeType':'text/csv','buffer':activity_csv}
+                migration.get_by_label('File migrasi kegiatan',exact=True).set_input_files(activity_file)
+                expect(migration).to_contain_text('2 baris kegiatan siap dimigrasikan')
+                migration.get_by_role('button',name='Migrasikan 2 Kegiatan',exact=True).click()
+                expect(migration).to_contain_text('2 ditambahkan, 0 duplikat dilewati')
+                migration.get_by_label('File migrasi kegiatan',exact=True).set_input_files(activity_file)
+                expect(migration).to_contain_text('2 baris kegiatan siap dimigrasikan')
+                migration.get_by_role('button',name='Migrasikan 2 Kegiatan',exact=True).click()
+                expect(migration).to_contain_text('0 ditambahkan, 2 duplikat dilewati')
+                print('PASS: batch activity migration through UI and repeat import without duplicates')
+                schema=json.loads((ROOT/'survey_schema.json').read_text())
+                with page.expect_download() as survey20_template:
+                    migration.get_by_role('button',name='Template Survei Kepuasan 20 Pertanyaan',exact=True).click()
+                inspect_script='''import * as XLSX from 'xlsx'; import fs from 'node:fs';
+                  const schema=JSON.parse(fs.readFileSync('survey_schema.json','utf8'));
+                  const workbook=XLSX.read(fs.readFileSync(process.argv[1]),{type:'buffer'});
+                  const headers=XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]],{header:1})[0];
+                  if(!schema.questions.every(q=>headers.includes(q))||!headers.includes(schema.suggestion))process.exit(1);'''
+                subprocess.run(['node','--input-type=module','-e',inspect_script,survey20_template.value.path()],cwd=ROOT,check=True)
+                headers=['Nama Kegiatan','Tanggal Survey','NIM','Nama',*schema['questions'],schema['suggestion']]
+                answer_a=[1,2,3,4,5]*4
+                answers_b=[5]*20
+                rows=[['Webinar Migrasi A','2024-02-22','000000000101','Responden A',*answer_a,'Topik A'],
+                      ['Webinar Migrasi B','2024-03-02','000000000102','Responden B',*answers_b,'Topik B']]
+                buffer=io.StringIO();writer=csv_tools.writer(buffer);writer.writerow(headers);writer.writerows(rows+[rows[0]])
+                survey_file={'name':'survey-20.csv','mimeType':'text/csv','buffer':buffer.getvalue().encode()}
+                migration.get_by_label('File migrasi hasil survei',exact=True).set_input_files(survey_file)
+                expect(migration).to_contain_text('3 respons survei kepuasan 20 pertanyaan')
+                expect(migration).to_contain_text('Webinar Migrasi A')
+                migration.get_by_role('button',name='Migrasikan 3 Respons Survei',exact=True).click()
+                expect(migration).to_contain_text('2 respons ditambahkan ke 2 kegiatan, 1 duplikat dilewati')
+                migration.get_by_label('File migrasi hasil survei',exact=True).set_input_files(survey_file)
+                expect(migration).to_contain_text('3 respons survei kepuasan 20 pertanyaan')
+                migration.get_by_role('button',name='Migrasikan 3 Respons Survei',exact=True).click()
+                expect(migration).to_contain_text('0 respons ditambahkan ke 2 kegiatan, 3 duplikat dilewati')
+                auth={'Authorization':'Bearer '+page.evaluate("sessionStorage.getItem('pkkm_token')")}
+                snapshot=page.request.get(url+'/api/dashboard',headers=auth).json()
+                assert len(snapshot['activities'])==3
+                assert len(snapshot['surveys'])==3
+                full=[s for s in snapshot['surveys'] if s.get('answers')]
+                assert len(full)==2
+                assert next(s for s in full if s['namaKegiatan']=='Webinar Migrasi A')['answers']==answer_a
+                survey_summary=page.get_by_role('region',name='Survei kepuasan 20 pertanyaan',exact=True)
+                expect(survey_summary.get_by_text(schema['questions'][0],exact=True)).to_be_visible()
+                expect(survey_summary).to_contain_text('2 respons instrumen 20 pertanyaan')
+                with page.expect_download() as exported20:
+                    survey_summary.get_by_role('button',name='Ekspor Jawaban Survei Kepuasan',exact=True).click()
+                subprocess.run(['node','--input-type=module','-e',inspect_script,exported20.value.path()],cwd=ROOT,check=True)
+                print('PASS: unchanged 20-question template/export, name matching, raw answers and idempotent survey migration')
+                bad=io.StringIO();bad_writer=csv_tools.writer(bad);bad_writer.writerow(headers);bad_writer.writerow(['Kegiatan Tidak Ada',*rows[0][1:]])
+                migration.get_by_label('File migrasi hasil survei',exact=True).set_input_files({'name':'salah-kegiatan.csv','mimeType':'text/csv','buffer':bad.getvalue().encode()})
+                expect(migration).to_contain_text('tidak ditemukan atau tidak sesuai pilihan')
+                expect(migration.get_by_role('button',name='Migrasikan 1 Respons Survei',exact=True)).to_be_disabled()
+                with page.expect_download() as migrated_pdf:
+                    page.get_by_role('button',name='Unduh PDF',exact=True).click()
+                pdf_text=' '.join(p.extract_text() for p in PdfReader(migrated_pdf.value.path()).pages)
+                assert 'meningkatkan pemahaman saya' in pdf_text
+                assert 'Webinar Migrasi A' in pdf_text
+                page.screenshot(path=str(ARTIFACTS/'migrasi-survei.png'),full_page=True)
+                print('PASS: wrong activity is blocked and PDF includes satisfaction question analysis')
                 assert not errors, errors
                 print('PASS: mobile navigation; no browser JavaScript errors')
                 browser.close()

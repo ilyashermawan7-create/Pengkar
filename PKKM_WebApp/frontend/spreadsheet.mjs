@@ -6,6 +6,7 @@ const aliases = {
   prodi: ['prodi','programstudi','programstudiprodi','prodiprogramstudi','namaprogramstudi'],
   fakultas: ['fakultas','namafakultas','asalfakultas'],
   kampus: ['kampus','asalkampus','lokasi','lokasikampus','namakampus','kampusasal'],
+  namakegiatan: ['namakegiatan','kegiatan','judulwebinar','namawebinar','namakegiatanpengembangankarakter'],
 };
 const normalized = value => String(value).trim().toLowerCase().replace(/\(wajib\)/g,'').replace(/[^a-z0-9]/g,'');
 const canonical = value => {
@@ -23,13 +24,19 @@ export async function readSpreadsheet(file, kind='survey') {
     const sheet = workbook.Sheets[sheetName];
     const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
     const rows = XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:true,blankrows:true});
-    const index = rows.findIndex((row,i) => i<30 && row.some(h=>canonical(h)==='nim')
-      && (kind!=='participants' || row.some(h=>canonical(h)==='nama')));
+    const index = rows.findIndex((row,i) => {
+      if(i>=30)return false;
+      const headers=row.map(canonical);
+      if(kind==='activities')return headers.includes('namakegiatan')&&headers.some(h=>['tanggal','tanggalkegiatan','tanggalpelaksanaan'].includes(h));
+      if(kind==='participants')return headers.includes('nim')&&headers.includes('nama');
+      return headers.includes('nim')||headers.includes('skormateri')||headers.includes('q01')||headers.includes('kegiataninimeningkatkanpemahamansayatentangtopikyangdibahas');
+    });
     if (index>=0) { selected={sheetName,sheet,rows,index,range};break; }
   }
   if (!selected) throw Error(kind==='participants'
     ? 'Kolom Nama Mahasiswa dan NIM/NPM tidak ditemukan dalam 30 baris awal. Gunakan template atau periksa judul kolom file.'
-    : 'Kolom NIM/NPM tidak ditemukan dalam 30 baris awal. Gunakan template yang tersedia.');
+    : kind==='activities'?'Kolom Nama Kegiatan dan Tanggal Kegiatan tidak ditemukan. Gunakan template kegiatan.'
+    : 'Judul kolom survei tidak ditemukan dalam 30 baris awal. Gunakan template survei.');
   const {sheetName,sheet,rows,index,range} = selected;
   const headers = rows[index].map(canonical);
   const data = rows.slice(index+1).filter(row=>row.some(value=>String(value).trim()));
@@ -46,9 +53,10 @@ export async function readSpreadsheet(file, kind='survey') {
       // Preserve zeroes from Excel formats such as 000000000000.
       if (cell?.w && /^\d+$/.test(cell.w)) return cell.w;
     }
-    return value instanceof Date ? value.toISOString().slice(0,10) : String(value??'').trim();
+    return value instanceof Date ? (['timestamp','stempelwaktu','waktupengisian'].includes(headers[column])?value.toISOString():value.toISOString().slice(0,10)) : String(value??'').trim();
   };
-  return {data,get,rowNumber,sheetName};
+  const has=(...names)=>names.some(name=>headers.includes(canonical(name)));
+  return {data,get,has,rowNumber,sheetName};
 }
 
 export async function readParticipants(file) {

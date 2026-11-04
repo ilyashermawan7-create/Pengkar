@@ -1,5 +1,6 @@
 import {jsPDF} from 'jspdf';
 import {autoTable} from 'jspdf-autotable';
+import surveySchema from '../survey_schema.json';
 
 let fontPromise;
 async function reportFont() {
@@ -61,9 +62,14 @@ export async function downloadReportPdf({activities,students,surveys,filters,pre
   table('Rekap Data Mahasiswa',['No.','NIM','Nama Mahasiswa','Program Studi','Fakultas','Kampus','Kegiatan'],people.map((s,index)=>[
     index+1,s.nim,s.nama,s.prodi||'—',s.fakultas||'—',s.kampus||'—',[...s.kegiatan.values()].join('; '),
   ]));
-  if(surveys.length)table('Rekap Respons Survei',['Tanggal','Kegiatan','NIM','Materi','Narasumber','Fasilitas','Dampak','Saran'],surveys.map(s=>[
+  if(surveys.length)table('Rekap Respons Survei',['Tanggal','Kegiatan','NIM','Pemahaman','Narasumber','Pelaksanaan','Pengembangan diri','Saran'],surveys.map(s=>[
     s.tanggalSurvey,names.get(s.activityId),s.nim||'—',s.skorMateri,s.skorNarasumber,s.skorFasilitas,s.skorDampakKarakter,s.saran||'—',
   ]));
+  const satisfaction=surveys.filter(response=>response.answers?.length===20);
+  if(satisfaction.length)table('Survei Kepuasan — Pertanyaan Asli',['No.','Pertanyaan','Respons','Rerata / 5','Persentase'],surveySchema.questions.map((question,index)=>{
+    const mean=satisfaction.reduce((sum,response)=>sum+response.answers[index],0)/satisfaction.length;
+    return [index+1,question,satisfaction.length,mean.toFixed(2),(mean*20).toFixed(1)+'%'];
+  }));
   const pages=doc.getNumberOfPages();
   for(let page=1;page<=pages;page++){
     doc.setPage(page);doc.setFontSize(8);doc.setTextColor(90);

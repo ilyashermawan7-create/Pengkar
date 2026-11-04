@@ -21,6 +21,8 @@ lama, akun dan password yang sudah tersimpan tetap dipakai.
 - Tampilan dan perilaku UI: `frontend/app.jsx`.
 - Gaya dan font: `frontend/styles.css`, `tailwind.config.js`.
 - Endpoint dashboard, profil, akun, dan migrasi: `dashboard_api.py`.
+- Impor massal dan pencocokan kegiatan: `frontend/MigrationPanel.jsx`, `frontend/migration.mjs`.
+- Instrumen kepuasan dan pertanyaan asli: `survey_schema.json`, `frontend/SurveySummary.jsx`.
 - Endpoint lama yang masih dipertahankan: `server.py`.
 
 Setelah mengedit frontend, bangun aset dan commit hasilnya:
@@ -78,7 +80,10 @@ prodi, fakultas, atau kampus yang kosong pada impor berikutnya tidak menghapus
 informasi master mahasiswa yang sudah diketahui. Angka Jumlah Peserta tanpa
 daftar NIM tetap merupakan jumlah kehadiran, bukan daftar mahasiswa.
 
-Skor survei wajib 1–5 pada keempat dimensi; skor kosong tidak diganti angka 5.
+Survei kepuasan memakai 20 jawaban 1–5 dan satu saran bebas; pertanyaan asli
+tidak diubah. Format lama empat skor tetap dibaca sebagai format legacy.
+Skor kosong tidak diganti angka 5. Lihat [panduan migrasi](MIGRASI_DATA.md)
+untuk template, penilaian, pencocokan kegiatan, dan aturan duplikat.
 Tanggal dan triwulan berasal dari tanggal kegiatan. Grafik, statistik,
 peserta unik berdasarkan NIM, dan ekspor mengikuti filter yang sama.
 Total peserta adalah akumulasi jumlah kehadiran; peserta unik hanya dihitung

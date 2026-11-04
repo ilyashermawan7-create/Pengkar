@@ -1,5 +1,6 @@
 import React from 'react';
 import {createPortal} from 'react-dom';
+import surveySchema from '../survey_schema.json';
 
 function Table({columns,rows,empty}) {
   return <table><thead><tr>{columns.map(column=><th key={column}>{column}</th>)}</tr></thead><tbody>
@@ -32,8 +33,12 @@ export default function PrintReport({activities,students,surveys,filters,prepare
     <Table columns={['No.','NIM','Nama Mahasiswa','Program Studi','Fakultas','Kampus','Kegiatan']} empty="Belum ada daftar mahasiswa tersimpan untuk kegiatan pada filter ini." rows={people.map((student,index)=>[
       index+1,student.nim,student.nama,student.prodi||'—',student.fakultas||'—',student.kampus||'—',[...student.kegiatan.values()].join('; '),
     ])}/>
-    {surveys.length>0&&<><h2>Rekap Respons Survei</h2><Table columns={['Tanggal','Kegiatan','NIM','Materi','Narasumber','Fasilitas','Dampak','Saran']} rows={surveys.map(s=>[
+    {surveys.length>0&&<><h2>Rekap Respons Survei</h2><Table columns={['Tanggal','Kegiatan','NIM','Pemahaman','Narasumber','Pelaksanaan','Pengembangan diri','Saran']} rows={surveys.map(s=>[
       s.tanggalSurvey,names.get(s.activityId),s.nim||'—',s.skorMateri,s.skorNarasumber,s.skorFasilitas,s.skorDampakKarakter,s.saran||'—',
     ])}/></>}
+    {surveys.some(response=>response.answers?.length===20)&&<><h2>Survei Kepuasan — Pertanyaan Asli</h2><Table columns={['No.','Pertanyaan','Respons','Rerata / 5']} rows={surveySchema.questions.map((question,index)=>{
+      const responses=surveys.filter(response=>response.answers?.length===20);
+      return [index+1,question,responses.length,(responses.reduce((sum,response)=>sum+response.answers[index],0)/responses.length).toFixed(2)];
+    })}/></>}
   </article>,document.body);
 }

@@ -2,10 +2,14 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import Chart from 'chart.js/auto';
 import * as XLSX from 'xlsx';
-import {readSpreadsheet, readParticipants} from './spreadsheet.mjs';
+import {readParticipants} from './spreadsheet.mjs';
 import StudentRecap from './StudentRecap.jsx';
 import PrintReport from './PrintReport.jsx';
 import {downloadReportPdf} from './reportPdf.mjs';
+import MigrationPanel from './MigrationPanel.jsx';
+import SurveySummary from './SurveySummary.jsx';
+import surveySchema from '../survey_schema.json';
+import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './migration.mjs';
 
     const { useState, useEffect, useRef } = React;
 
@@ -104,14 +108,16 @@ import {downloadReportPdf} from './reportPdf.mjs';
       const visibleIds = new Set(filteredActivities.map(a=>a.id));
       const filteredStudents=students.filter(s=>visibleIds.has(s.activityId));
       const filteredSurveys=surveys.filter(s=>visibleIds.has(s.activityId));
+      const fullSurveys=filteredSurveys.filter(s=>s.answers?.length===20);
+      const measuredSurveys=fullSurveys.length?fullSurveys:filteredSurveys;
       const years=[...new Set([...activities.map(a=>a.tahun),String(new Date().getFullYear())])].sort().reverse();
       const categories=[...new Set(['Pengembangan Karakter','Pengkar Asrama','Wawasan Kebangsaan','Konseling','Kesehatan Mental','PPKPT',...activities.map(a=>a.kategori)])];
       const mean = values => values.length ? values.reduce((a,b)=>a+b,0)/values.length : null;
-      const surveyMetrics=[['Relevansi & Manfaat Materi','skorMateri'],['Kompetensi Narasumber','skorNarasumber'],['Kenyamanan Sarana & Fasilitas','skorFasilitas'],['Internalisasi Nilai Karakter','skorDampakKarakter']].map(([label,key])=>{
-        const value=mean(filteredSurveys.map(s=>s[key]));
+      const surveyMetrics=surveySchema.groups.map(({label,field:key})=>{
+        const value=mean(measuredSurveys.map(s=>s[key]).filter(value=>value!==null&&value!==undefined));
         return {label,val:value===null?'—':(value*20).toFixed(1)+'%',skor:value===null?'—':value.toFixed(2),status:value===null?'Belum ada respons':value>=4.5?'Sangat Memuaskan':value>=3.5?'Memuaskan':'Perlu Perbaikan'};
       });
-      const satisfaction=mean(filteredSurveys.flatMap(s=>[s.skorMateri,s.skorNarasumber,s.skorFasilitas,s.skorDampakKarakter]));
+      const satisfaction=mean(measuredSurveys.map(s=>s.skorTotal??(s.skorMateri+s.skorNarasumber+s.skorFasilitas+s.skorDampakKarakter)/4));
       const facultyCounts=Object.entries([...new Map(filteredStudents.map(s=>[s.nim,s])).values()].reduce((acc,s)=>{const key=s.fakultas||'Belum diisi';acc[key]=(acc[key]||0)+1;return acc;},{})).sort((a,b)=>b[1]-a[1]);
 
       // Ref Chart Dashboard
@@ -164,21 +170,20 @@ import {downloadReportPdf} from './reportPdf.mjs';
       const handleImportSurveys = async (e) => {
         const file=e.target.files[0];e.target.value='';if(!file)return;
         await run(async()=>{
-          const {data,get}=await readSpreadsheet(file);
-          const parsed=data.map((row,index)=>{
-            const score=(...keys)=>{const raw=get(row,...keys);const value=Number(raw.replace(',','.'));if(!raw||!Number.isFinite(value)||value<1||value>5)throw Error('Baris '+(index+2)+': semua skor wajib diisi dengan angka 1–5.');return value;};
-            const nim=get(row,'nim');const matched=participantRows.find(s=>s.nim===nim)||findStudent(nim);
-            const rawDate=get(row,'tanggalsurvey','tanggal');
-            let date=rawDate;
-            if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){
-              const parts=date.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
-              if(parts)date=parts[3]+'-'+parts[2].padStart(2,'0')+'-'+parts[1].padStart(2,'0');
-            }
-            if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date)))throw Error('Baris '+(index+2)+': tanggal survei harus YYYY-MM-DD.');
-            return {tanggalSurvey:date,nim,nama:matched?.nama||get(row,'nama','namalengkap'),fakultas:matched?.fakultas||get(row,'fakultas'),kampus:matched?.kampus||get(row,'kampus','asalkampus'),skorMateri:score('skormateri'),skorNarasumber:score('skornarasumber'),skorFasilitas:score('skorfasilitas'),skorDampakKarakter:score('skordampak','skordampakkarakter'),saran:get(row,'saran','kritiksaran')};
+          const imported=await readSurveyResponses(file);
+          const activityNames=[...new Set(imported.items.map(item=>item.namaKegiatan).filter(Boolean).map(normalizeName))];
+          const expectedId=profileData.role==='verifier'?Number(surveyActivityId):editingId;
+          if(imported.items.some(item=>item.activityId&&item.activityId!==expectedId))throw Error('ID kegiatan di file tidak cocok dengan form ini. Gunakan panel migrasi untuk mencocokkan kegiatan.');
+          if(activityNames.length>1)throw Error('File memuat beberapa kegiatan. Gunakan panel Impor / Migrasi Data Lama.');
+          const expectedName=profileData.role==='verifier'?activities.find(a=>a.id===Number(surveyActivityId))?.namaKegiatan:activityForm.namaKegiatan;
+          if(expectedName&&activityNames.length&&activityNames[0]!==normalizeName(expectedName))throw Error('Nama kegiatan di file tidak sesuai kegiatan yang sedang dipilih. Gunakan panel migrasi untuk beberapa kegiatan.');
+          const parsed=imported.items.map(item=>{
+            const matched=participantRows.find(s=>s.nim===item.response.nim)||findStudent(item.response.nim);
+            return {...item.response,nama:item.response.nama||matched?.nama||'',fakultas:item.response.fakultas||matched?.fakultas||'',kampus:item.response.kampus||matched?.kampus||''};
           });
+          if(!expectedName&&imported.items[0].namaKegiatan)setActivityForm(prev=>({...prev,namaKegiatan:imported.items[0].namaKegiatan}));
           setSurveyRows(parsed);
-          const average=mean(parsed.flatMap(s=>[s.skorMateri,s.skorNarasumber,s.skorFasilitas,s.skorDampakKarakter]));
+          const average=mean(parsed.map(s=>s.skorTotal));
           setActivityForm(prev=>({...prev,targetSurveyKepuasan:average.toFixed(2),catatanSurvey:`Diimpor dari ${file.name}: ${parsed.length} respons.`}));
           setNotice(parsed.length+' respons survei siap disimpan.');
         });
@@ -245,16 +250,8 @@ import {downloadReportPdf} from './reportPdf.mjs';
         XLSX.writeFile(wb, "Template_Import_Mahasiswa_TelU.xlsx");
       };
 
-      // Unduh Template Survey
-      const downloadSurveyTemplate = () => {
-        const sample = [
-          { "tanggalSurvey": freshForm().tanggal, "namaKegiatan": "Kegiatan Contoh", "NIM": "000000000001", "skorMateri": 5, "skorNarasumber": 5, "skorFasilitas": 5, "skorDampak": 5, "Saran": "Materi sangat jelas dan aplikatif" }
-        ];
-        const ws = XLSX.utils.json_to_sheet(sample);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Template_Survey");
-        XLSX.writeFile(wb, "Template_Import_Survey_Mahasiswa.xlsx");
-      };
+      // Unduh Template Survei Kepuasan
+      const downloadSurveyTemplate = () => downloadSatisfactionTemplate(activityForm.namaKegiatan || activities.find(a=>a.id===Number(surveyActivityId))?.namaKegiatan || '');
 
       // =========================================================================
       // 1. TAMPILAN AWALAN LOGIN (WAJIB LOGIN TERLEBIH DAHULU)
@@ -678,6 +675,7 @@ import {downloadReportPdf} from './reportPdf.mjs';
                       <p className="text-xs text-slate-500">
                         Evaluasi komprehensif berdasarkan {filteredSurveys.length} respons mahasiswa peserta kegiatan pembinaan karakter.
                       </p>
+                      <p className="text-xs text-slate-500 mt-1">{fullSurveys.length?`Indeks memakai ${fullSurveys.length} respons lengkap 20 pertanyaan; format lama tidak dicampur.`:'Belum ada respons 20 pertanyaan. Ringkasan format lama ditampilkan bila tersedia.'}</p>
                     </div>
                     <div className="text-right bg-red-50 p-3 rounded-2xl border border-red-100">
                       <span className="text-[10px] font-bold text-[#D71920] block uppercase tracking-wider">Indeks Kepuasan Total</span>
@@ -685,7 +683,7 @@ import {downloadReportPdf} from './reportPdf.mjs';
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                     {surveyMetrics.map((item, idx) => (
                       <div key={idx} className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
                         <span className="text-xs font-semibold text-slate-500 block">{item.label}</span>
@@ -699,6 +697,7 @@ import {downloadReportPdf} from './reportPdf.mjs';
                   </div>
                 </div>
 
+              <SurveySummary surveys={filteredSurveys} activities={filteredActivities} />
               <StudentRecap rows={filteredStudents} activities={filteredActivities} />
               </main>
             )}
@@ -709,6 +708,7 @@ import {downloadReportPdf} from './reportPdf.mjs';
             {activeNav === 'laporan' && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
 
+                <MigrationPanel activities={activities} role={profileData.role} api={api} reload={load} />
                 <div className="bg-white border rounded-2xl p-4 space-y-3 text-xs no-print"><h3 className="font-bold">Filter Laporan</h3><div className="flex flex-wrap gap-3"><input aria-label="Cari laporan" placeholder="NIM / nama kegiatan" value={searchNim} onChange={e=>setSearchNim(e.target.value)} className="border rounded-lg p-2"/><select aria-label="Tahun laporan" value={filterYear} onChange={e=>setFilterYear(e.target.value)} className="border rounded-lg p-2"><option>Semua Tahun</option>{years.map(y=><option key={y}>{y}</option>)}</select><select aria-label="Triwulan laporan" value={filterTw} onChange={e=>setFilterTw(e.target.value)} className="border rounded-lg p-2"><option>Semua Triwulan</option>{['TW1','TW2','TW3','TW4'].map(q=><option key={q}>{q}</option>)}</select><select aria-label="Kategori laporan" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)} className="border rounded-lg p-2"><option>Semua Kategori</option>{categories.map(c=><option key={c}>{c}</option>)}</select><button onClick={()=>{setSearchNim('');setFilterYear('Semua Tahun');setFilterTw('Semua Triwulan');setFilterCategory('Semua Kategori');}} className="border rounded-lg p-2">Reset Filter</button></div></div>
                 {/* FORM INPUT KEGIATAN 16 FIELD MASTER PERSIS GAMBAR LAMPIRAN */}
                 <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
@@ -721,7 +721,7 @@ import {downloadReportPdf} from './reportPdf.mjs';
                     </p>
                   </div>
 
-                  {profileData.role==='verifier' && <section className="p-5 bg-amber-50 border border-amber-200 rounded-2xl space-y-3 text-xs"><h3 className="font-bold">Verifikasi / Impor Respons Survei</h3><label className="block">Kegiatan<select aria-label="Kegiatan survei" value={surveyActivityId} onChange={e=>{setSurveyActivityId(e.target.value);setSurveyRows([]);}} className="block w-full border rounded-xl p-3 mt-1"><option value="">Pilih kegiatan</option>{activities.map(a=><option key={a.id} value={a.id}>{a.namaKegiatan}</option>)}</select></label><input aria-label="Berkas survei verifikator" type="file" accept=".xlsx,.xls,.csv" onChange={handleImportSurveys} disabled={busy||!surveyActivityId}/><p>{surveyRows.length} respons siap disimpan.</p><button type="button" onClick={downloadSurveyTemplate} className="border bg-white rounded-xl p-2 mr-2">Template Survey</button><button type="button" disabled={busy||!surveyRows.length} onClick={saveSurveyImport} className="bg-amber-600 text-white rounded-xl p-2">Simpan Respons Survei</button></section>}
+                  {profileData.role==='verifier' && <section className="p-5 bg-amber-50 border border-amber-200 rounded-2xl space-y-3 text-xs"><h3 className="font-bold">Verifikasi / Impor Respons Survei</h3><label className="block">Kegiatan<select aria-label="Kegiatan survei" value={surveyActivityId} onChange={e=>{setSurveyActivityId(e.target.value);setSurveyRows([]);}} className="block w-full border rounded-xl p-3 mt-1"><option value="">Pilih kegiatan</option>{activities.map(a=><option key={a.id} value={a.id}>{a.namaKegiatan}</option>)}</select></label><input aria-label="Berkas survei verifikator" type="file" accept=".xlsx,.xls,.csv" onChange={handleImportSurveys} disabled={busy||!surveyActivityId}/><p>{surveyRows.length} respons siap disimpan.</p><button type="button" aria-label="Template Survey" title="20 pertanyaan asli. Lengkapi skor 1–5 sebelum mengimpor." onClick={downloadSurveyTemplate} className="border bg-white rounded-xl p-2 mr-2">Template Survey</button><button type="button" disabled={busy||!surveyRows.length} onClick={saveSurveyImport} className="bg-amber-600 text-white rounded-xl p-2">Simpan Respons Survei</button></section>}
                   {!canWrite && <p className="text-sm text-slate-500">Akun ini dapat membaca laporan. Input kegiatan tersedia untuk operator dan administrator.</p>}
                   {canWrite && <form onSubmit={handleSaveActivity} className="space-y-6 text-xs">
                     {editingId && <div className="p-3 bg-blue-50 text-blue-900 rounded-xl">Mengedit kegiatan #{editingId}. <button type="button" onClick={resetActivity}>Batalkan edit</button></div>}
@@ -821,7 +821,7 @@ import {downloadReportPdf} from './reportPdf.mjs';
                           <div className="flex gap-2">
                             <label className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs cursor-pointer shadow-sm">
                               Pilih File Mahasiswa (.xlsx/.csv)
-                              <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={handleImportParticipantFile} />
+                              <input aria-label="Berkas peserta kegiatan" type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={handleImportParticipantFile} />
                             </label>
                             <button
                               type="button"
@@ -937,14 +937,14 @@ import {downloadReportPdf} from './reportPdf.mjs';
                           <div className="flex gap-2">
                             <label className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs cursor-pointer shadow-sm">
                               Import Nilai Survey Mahasiswa
-                              <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={handleImportSurveys} />
+                              <input aria-label="Berkas survei kegiatan" type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={handleImportSurveys} />
                             </label>
                             <button
                               type="button"
-                              onClick={downloadSurveyTemplate}
+                              aria-label="Template Survey" title="20 pertanyaan asli. Lengkapi skor 1–5 sebelum mengimpor." onClick={downloadSurveyTemplate}
                               className="px-3 py-1.5 bg-white text-amber-800 border border-amber-200 rounded-xl text-xs font-semibold hover:bg-amber-50"
                             >
-                              Template Survey
+                              Template Survei Kepuasan
                             </button>
                           </div>
                         </div>
@@ -1085,6 +1085,7 @@ import {downloadReportPdf} from './reportPdf.mjs';
                   </div>
                 </div>
 
+              <SurveySummary surveys={filteredSurveys} activities={filteredActivities} />
               <StudentRecap rows={filteredStudents} activities={filteredActivities} />
               </main>
             )}

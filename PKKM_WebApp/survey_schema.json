@@ -1,0 +1,34 @@
+{
+  "version": "kepuasan-20-v1",
+  "questions": [
+    "Kegiatan ini meningkatkan pemahaman saya tentang topik yang dibahas.",
+    "⁠Saya memperoleh informasi baru yang bermanfaat dari kegiatan ini.",
+    "Materi yang disampaikan dalam kegiatan ini relevan dengan kebutuhan pengembangan saya.",
+    "⁠Pembicara menyajikan konten dengan jelas dan mudah dipahami.",
+    "Saya merasa termotivasi untuk menerapkan pengetahuan yang diperoleh dari kegiatan ini.",
+    "Kegiatan ini menyediakan kesempatan yang cukup untuk diskusi dan tanya jawab.",
+    "Saya merasa keterlibatan saya selama kegiatan dihargai dan diperhatikan.",
+    "Format kegiatan memudahkan saya untuk tetap terlibat selama sesi.",
+    "⁠Kegiatan ini memberikan wawasan tentang pengembangan diri saya.",
+    "Saya mendapatkan pemahaman yang lebih baik tentang nilai-nilai penting dalam perkuliahan dan kehidupan pribadi saya.",
+    "Kegiatan ini menantang saya untuk merefleksikan dan memperbaiki sikap saya terhadap orang lain.",
+    "Saya merasa lebih siap untuk menghadapi tantangan etis di perkuliahan setelah mengikuti kegiatan ini.",
+    "Saya yakin bahwa pengetahuan dan keterampilan yang diperoleh dari kegiatan ini akan berguna dalam jangka panjang.",
+    "Saya berencana untuk mengikuti lebih banyak kegiatan serupa yang ditawarkan oleh penyelenggara.",
+    "Saya akan merekomendasikan kegiatan ini kepada teman.",
+    "Secara keseluruhan, saya merasa puas dengan pengalaman yang saya dapatkan dari kegiatan ini.",
+    "Kegiatan ini memberikan nilai yang setara atau lebih dari waktu yang saya investasikan.",
+    "Saya merasa nyaman dengan platform yang digunakan untuk kegiatan ini.",
+    "Waktu yang dialokasikan untuk kegiatan ini tepat, tidak terlalu panjang atau terlalu singkat.",
+    "Saya merasa puas terhadap pembicara pada kegiatan ini."
+  ],
+  "suggestion": "Saran Topik untuk Webinar selanjutnya",
+  "scale": {"min": 1, "max": 5},
+  "groups": [
+    {"label": "Pemahaman dan relevansi materi", "field": "skorMateri", "items": [1, 2, 3]},
+    {"label": "Kepuasan terhadap narasumber", "field": "skorNarasumber", "items": [4, 20]},
+    {"label": "Keterlibatan dan pelaksanaan", "field": "skorFasilitas", "items": [6, 7, 8, 18, 19]},
+    {"label": "Pengembangan diri dan tindak lanjut", "field": "skorDampakKarakter", "items": [5, 9, 10, 11, 12, 13, 14, 15]},
+    {"label": "Kepuasan keseluruhan dan nilai kegiatan", "field": "skorKepuasan", "items": [16, 17]}
+  ]
+}

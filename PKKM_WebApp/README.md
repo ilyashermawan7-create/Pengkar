@@ -7,6 +7,11 @@ Dashboard kini mengikuti referensi `Pengkar.html`: grafik dan filter, formulir
 penggantian username dan password. Lihat [panduan pengembangan](DEVELOPMENT.md)
 untuk lokasi kode, perhitungan, migrasi data, dan cara membangun frontend.
 
+Impor massal kegiatan dan hasil survei tersedia di menu Laporan. Instrumen
+kepuasan mempertahankan 20 pertanyaan asli serta pertanyaan saran topik.
+Ikuti [panduan migrasi data](MIGRASI_DATA.md) untuk memakai template Excel/CSV
+dan mencocokkan survei dengan nama kegiatan yang benar.
+
 ## Menjalankan (Windows PowerShell)
 
 ```powershell

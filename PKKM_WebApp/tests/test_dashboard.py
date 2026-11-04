@@ -187,6 +187,99 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(data['activities'][0]['triwulan'],'TW1')
         self.assertIsNone(data['activities'][0]['skorSurvey'])
 
+    def test_satisfaction_answers_are_preserved_and_scores_recomputed(self):
+        answers=[1,2,3,4,5]*4
+        response={'tanggalSurvey':'2026-11-04','nim':'123456789012','answers':answers,'skorTotal':5,'saran':'Topik berikutnya'}
+        self.create(self.activity(surveys=[response]))
+        data=self.snapshot()
+        survey=data['surveys'][0]
+        self.assertEqual(survey['answers'],answers)
+        self.assertEqual(survey['instrument'],'kepuasan-20-v1')
+        self.assertEqual(survey['skorTotal'],3)
+        self.assertEqual(survey['skorMateri'],2)
+        self.assertEqual(survey['skorNarasumber'],4.5)
+        self.assertEqual(survey['skorKepuasan'],1.5)
+        self.assertEqual(data['activities'][0]['skorSurvey'],3)
+
+    def test_satisfaction_missing_or_out_of_range_answers_are_rejected(self):
+        for answers in ([4]*19,[4]*19+[6],[4]*19+[None]):
+            response=self.client.post('/api/dashboard/activities',headers=self.headers,json=self.activity(surveys=[{
+                'tanggalSurvey':'2026-11-04','answers':answers}]))
+            self.assertEqual(response.status_code,422,response.text)
+        self.assertEqual(self.snapshot()['activities'],[])
+
+    def test_bulk_activity_migration_is_idempotent_and_keeps_existing_data(self):
+        first=self.activity(participants=[],surveys=[])
+        second=self.activity(namaKegiatan='Kegiatan kedua',participants=[],surveys=[])
+        result=self.client.post('/api/migrate/activities',headers=self.headers,json={'items':[first,second]})
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(result.json(),{'created':2,'skipped':0})
+        repeated={**first,'namaKegiatan':'  KEGIATAN   UJI  ','jumlahPeserta':999}
+        result=self.client.post('/api/migrate/activities',headers=self.headers,json={'items':[repeated,second]})
+        self.assertEqual(result.json(),{'created':0,'skipped':2})
+        self.assertEqual(len(self.snapshot()['activities']),2)
+        self.assertTrue(all(a['jumlahPeserta']==1 for a in self.snapshot()['activities']))
+
+    def test_migration_does_not_partially_import_unauthorized_program(self):
+        _,headers=self.new_user('pengkaruser','pengkar')
+        items=[self.activity(participants=[],surveys=[]),self.activity(program='Asrama',participants=[],surveys=[])]
+        response=self.client.post('/api/migrate/activities',headers=headers,json={'items':items})
+        self.assertEqual(response.status_code,403,response.text)
+        self.assertEqual(self.snapshot()['activities'],[])
+
+    def test_bulk_survey_migration_appends_matches_names_and_skips_duplicates(self):
+        first=self.create()
+        second=self.create(self.activity(namaKegiatan='Kegiatan kedua',surveys=[]))
+        base={'tanggalSurvey':'2026-11-04','answers':[3]*20,'nim':'123456789012','saran':'Saran Topik'}
+        items=[{'activityId':first,'namaKegiatan':'Kegiatan uji','sourceRow':2,'response':base},
+               {'activityId':second,'namaKegiatan':'Kegiatan kedua','sourceRow':3,'response':base}]
+        result=self.client.post('/api/migrate/surveys',headers=self.headers,json={'items':items})
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(result.json()['created'],2)
+        data=self.snapshot()
+        self.assertEqual(len(data['surveys']),3)  # Keeps the existing legacy response.
+        self.assertEqual(next(a for a in data['activities'] if a['id']==first)['skorSurvey'],3)
+        result=self.client.post('/api/migrate/surveys',headers=self.headers,json={'items':items})
+        self.assertEqual(result.json()['created'],0)
+        self.assertEqual(result.json()['skipped'],2)
+        self.assertEqual(len(self.snapshot()['surveys']),3)
+
+    def test_migration_wrong_activity_name_rolls_back_whole_request(self):
+        ident=self.create(self.activity(surveys=[]))
+        response={'tanggalSurvey':'2026-11-04','answers':[4]*20}
+        items=[{'activityId':ident,'namaKegiatan':'Kegiatan uji','response':response},
+               {'activityId':ident,'namaKegiatan':'Kegiatan yang salah','sourceRow':3,'response':response}]
+        result=self.client.post('/api/migrate/surveys',headers=self.headers,json={'items':items})
+        self.assertEqual(result.status_code,422)
+        self.assertEqual(self.snapshot()['surveys'],[])
+
+    def test_verifier_can_migrate_surveys_but_not_activities(self):
+        ident=self.create(self.activity(surveys=[]))
+        _,headers=self.new_user('surveyverifier','verifier')
+        result=self.client.post('/api/migrate/activities',headers=headers,json={'items':[self.activity(participants=[],surveys=[])]})
+        self.assertEqual(result.status_code,403)
+        result=self.client.post('/api/migrate/surveys',headers=headers,json={'items':[{
+            'activityId':ident,'response':{'tanggalSurvey':'2026-11-04','answers':[5]*20}}]})
+        self.assertEqual(result.status_code,200,result.text)
+
+    def test_distinct_submission_timestamps_are_not_collapsed(self):
+        ident=self.create(self.activity(surveys=[]))
+        items=[{'activityId':ident,'response':{'tanggalSurvey':'2026-11-04','nim':'123456789012',
+                'submittedAt':timestamp,'answers':[4]*20}} for timestamp in ('2026-11-04T10:00:00','2026-11-04T11:00:00')]
+        result=self.client.post('/api/migrate/surveys',headers=self.headers,json={'items':items})
+        self.assertEqual(result.json()['created'],2)
+        self.assertEqual(len(self.snapshot()['surveys']),2)
+
+    def test_identical_anonymous_responses_with_distinct_source_rows_are_preserved(self):
+        ident=self.create(self.activity(surveys=[]))
+        items=[{'activityId':ident,'response':{'tanggalSurvey':'2026-11-04',
+                'sourceKey':key,'answers':[4]*20}} for key in ('file-hash:2','file-hash:3')]
+        result=self.client.post('/api/migrate/surveys',headers=self.headers,json={'items':items})
+        self.assertEqual(result.json()['created'],2)
+        result=self.client.post('/api/migrate/surveys',headers=self.headers,json={'items':items})
+        self.assertEqual(result.json()['skipped'],2)
+        self.assertEqual(len(self.snapshot()['surveys']),2)
+
 
 if __name__ == '__main__':
     unittest.main()

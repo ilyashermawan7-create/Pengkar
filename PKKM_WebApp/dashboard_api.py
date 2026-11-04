@@ -2,11 +2,18 @@
 import datetime
 import json
 import sqlite3
+import hashlib
+import unicodedata
 from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+SURVEY_SCHEMA = json.loads((Path(__file__).parent/'survey_schema.json').read_text(encoding='utf-8'))
+
+def normalized_name(value):
+    return ' '.join(unicodedata.normalize('NFKC',value).casefold().split())
 
 
 def initialize(connect):
@@ -68,11 +75,35 @@ class Survey(Input):
     nama: str = Field(default='', max_length=200)
     fakultas: str = Field(default='', max_length=200)
     kampus: str = Field(default='', max_length=200)
-    skorMateri: float = Field(ge=1, le=5)
-    skorNarasumber: float = Field(ge=1, le=5)
-    skorFasilitas: float = Field(ge=1, le=5)
-    skorDampakKarakter: float = Field(ge=1, le=5)
+    skorMateri: float | None = Field(default=None, ge=1, le=5)
+    skorNarasumber: float | None = Field(default=None, ge=1, le=5)
+    skorFasilitas: float | None = Field(default=None, ge=1, le=5)
+    skorDampakKarakter: float | None = Field(default=None, ge=1, le=5)
+    answers: list[float] | None = Field(default=None, min_length=20, max_length=20)
+    instrument: str = Field(default='', max_length=50)
+    submittedAt: str = Field(default='', max_length=100)
+    sourceKey: str = Field(default='', max_length=100)
+    skorTotal: float | None = Field(default=None, ge=1, le=5)
+    skorKepuasan: float | None = Field(default=None, ge=1, le=5)
     saran: str = Field(default='', max_length=5000)
+
+    @model_validator(mode='after')
+    def scores(self):
+        if self.answers is not None:
+            if any(not 1 <= answer <= 5 for answer in self.answers):
+                raise ValueError('Semua 20 jawaban wajib berupa angka 1–5')
+            for group in SURVEY_SCHEMA['groups']:
+                setattr(self,group['field'],sum(self.answers[i-1] for i in group['items'])/len(group['items']))
+            self.skorTotal=sum(self.answers)/20
+            self.instrument=SURVEY_SCHEMA['version']
+        else:
+            values=[self.skorMateri,self.skorNarasumber,self.skorFasilitas,self.skorDampakKarakter]
+            if any(value is None for value in values):
+                raise ValueError('Isi semua 20 jawaban survei atau keempat skor format lama')
+            self.skorTotal=sum(values)/4
+            self.skorKepuasan=None
+            self.instrument='legacy-4'
+        return self
 
 
 class DashboardActivity(Input):
@@ -124,6 +155,21 @@ class Password(Input):
     new_password: str = Field(min_length=12, max_length=512)
 
 
+class ActivityMigration(Input):
+    items: list[DashboardActivity] = Field(min_length=1,max_length=10000)
+
+
+class SurveyMigrationRow(Input):
+    activityId: int = Field(gt=0)
+    namaKegiatan: str = Field(default='',max_length=200)
+    sourceRow: int = Field(default=0,ge=0)
+    response: Survey
+
+
+class SurveyMigration(Input):
+    items: list[SurveyMigrationRow] = Field(min_length=1,max_length=10000)
+
+
 def register(app, connect, auth, allow, audit, hash_password, check_password):
     def visible(user, program):
         return user['role'] not in ('pengkar', 'asrama') or program == ('Asrama' if user['role'] == 'asrama' else 'Pengembangan Karakter')
@@ -148,7 +194,8 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             if key in extras:
                 result[key] = extras[key]
         result.update(id=data['id'], tahun=str(date.year), triwulan=f'TW{(date.month-1)//3+1}')
-        scores = [r[k] for r in responses for k in ('skorMateri', 'skorNarasumber', 'skorFasilitas', 'skorDampakKarakter')]
+        full = [r for r in responses if r.get('answers') is not None]
+        scores = [r.get('skorTotal') or sum(r[k] for k in ('skorMateri','skorNarasumber','skorFasilitas','skorDampakKarakter'))/4 for r in (full or responses)]
         legacy = [data[k] for k in ('skor_materi', 'skor_narasumber', 'skor_fasilitas', 'skor_dampak') if data.get(k) is not None]
         result['skorSurvey'] = round(sum(scores)/len(scores), 2) if scores else (round(sum(legacy)/len(legacy), 2) if legacy else result.get('targetSurveyKepuasan'))
         return result
@@ -161,7 +208,7 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             rows = [r for r in rows if visible(user, r['program'])]
             ids = {r['id'] for r in rows}
             details = {r['activity_id']: json.loads(r['payload']) for r in c.execute('SELECT * FROM activity_details') if r['activity_id'] in ids}
-            surveys = [dict(json.loads(r['payload']), id=r['id'], activityId=r['activity_id']) for r in c.execute('SELECT * FROM survey_responses') if r['activity_id'] in ids]
+            surveys = [dict(Survey.model_validate_json(r['payload']).model_dump(mode='json'), id=r['id'], activityId=r['activity_id']) for r in c.execute('SELECT * FROM survey_responses') if r['activity_id'] in ids]
             by_activity = {}
             for survey in surveys:
                 by_activity.setdefault(survey['activityId'], []).append(survey)
@@ -184,7 +231,8 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
         for survey in surveys:
             c.execute('INSERT INTO survey_responses(activity_id,payload) VALUES(?,?)', (ident,json.dumps(survey.model_dump(mode='json'))))
         if surveys:
-            means = [sum(getattr(s,k) for s in surveys)/len(surveys) for k in ('skorMateri','skorNarasumber','skorFasilitas','skorDampakKarakter')]
+            measured=[s for s in surveys if s.answers is not None] or surveys
+            means = [sum(getattr(s,k) for s in measured)/len(measured) for k in ('skorMateri','skorNarasumber','skorFasilitas','skorDampakKarakter')]
             c.execute('''INSERT INTO evaluations(activity_id,jumlah_responden,skor_materi,skor_narasumber,skor_fasilitas,skor_dampak,temuan,updated_by)
                 VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(activity_id) DO UPDATE SET jumlah_responden=excluded.jumlah_responden,
                 skor_materi=excluded.skor_materi,skor_narasumber=excluded.skor_narasumber,skor_fasilitas=excluded.skor_fasilitas,
@@ -195,45 +243,113 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             c.execute('DELETE FROM evaluations WHERE activity_id=?', (ident,))
             c.execute("UPDATE activities SET status='Terlaksana' WHERE id=?", (ident,))
 
-    def save(data, user, ident=None):
+    def save(data, user, ident=None, connection=None):
         allow(user, data.program)
         participants = {s.nim: s for s in data.participants}
         if participants and data.jumlahPeserta != len(participants):
             raise HTTPException(422, 'Jumlah peserta harus sama dengan jumlah NIM unik pada berkas peserta.')
-        with connect() as c:
-            c.execute('BEGIN IMMEDIATE')
-            if ident is not None:
-                old = c.execute('SELECT * FROM activities WHERE id=?', (ident,)).fetchone()
-                if not old:
-                    raise HTTPException(404, 'Kegiatan tidak ditemukan')
-                allow(user, old['program'])
-            values = (data.namaKegiatan, data.tanggal.isoformat(), data.program, data.kategori, data.tempat,
-                      data.unitKerjasama, data.pembicara, data.jumlahPeserta, data.laporan, data.linkEvident)
-            if ident is None:
-                cur = c.execute('''INSERT INTO activities(nama_kegiatan,tanggal,program,kategori,tempat,unit_kerjasama,
-                    pembicara,jumlah_peserta,laporan,link_eviden,status,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''', values+('Terlaksana',user['id']))
-                ident = cur.lastrowid
-            else:
-                c.execute('''UPDATE activities SET nama_kegiatan=?,tanggal=?,program=?,kategori=?,tempat=?,unit_kerjasama=?,
-                    pembicara=?,jumlah_peserta=?,laporan=?,link_eviden=?,updated_at=CURRENT_TIMESTAMP WHERE id=?''', values+(ident,))
-            payload = data.model_dump(mode='json', exclude={'participants','surveys'})
-            c.execute('INSERT INTO activity_details VALUES(?,?) ON CONFLICT(activity_id) DO UPDATE SET payload=excluded.payload', (ident,json.dumps(payload)))
-            c.execute('DELETE FROM activity_participants WHERE activity_id=?', (ident,))
-            for student in participants.values():
-                c.execute('''INSERT INTO students VALUES(?,?,?,?,?) ON CONFLICT(nim) DO UPDATE SET
-                    nama=excluded.nama,
-                    prodi=CASE WHEN excluded.prodi<>'' THEN excluded.prodi ELSE students.prodi END,
-                    fakultas=CASE WHEN excluded.fakultas<>'' THEN excluded.fakultas ELSE students.fakultas END,
-                    kampus=CASE WHEN excluded.kampus<>'' THEN excluded.kampus ELSE students.kampus END''',
-                          (student.nim, student.nama, student.prodi, student.fakultas, student.kampus))
-                c.execute('INSERT INTO activity_participants VALUES(?,?)', (ident,student.nim))
-            write_surveys(c, ident, data.surveys, user, data.catatanSurvey)
-            audit(c,user,'save','activity',ident)
+        if connection is None:
+            with connect() as c:
+                c.execute('BEGIN IMMEDIATE')
+                return save(data,user,ident,connection=c)
+        c=connection
+        if ident is not None:
+            old = c.execute('SELECT * FROM activities WHERE id=?', (ident,)).fetchone()
+            if not old:
+                raise HTTPException(404, 'Kegiatan tidak ditemukan')
+            allow(user, old['program'])
+        values = (data.namaKegiatan, data.tanggal.isoformat(), data.program, data.kategori, data.tempat,
+                  data.unitKerjasama, data.pembicara, data.jumlahPeserta, data.laporan, data.linkEvident)
+        if ident is None:
+            cur = c.execute('''INSERT INTO activities(nama_kegiatan,tanggal,program,kategori,tempat,unit_kerjasama,
+                pembicara,jumlah_peserta,laporan,link_eviden,status,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)''', values+('Terlaksana',user['id']))
+            ident = cur.lastrowid
+        else:
+            c.execute('''UPDATE activities SET nama_kegiatan=?,tanggal=?,program=?,kategori=?,tempat=?,unit_kerjasama=?,
+                pembicara=?,jumlah_peserta=?,laporan=?,link_eviden=?,updated_at=CURRENT_TIMESTAMP WHERE id=?''', values+(ident,))
+        payload = data.model_dump(mode='json', exclude={'participants','surveys'})
+        c.execute('INSERT INTO activity_details VALUES(?,?) ON CONFLICT(activity_id) DO UPDATE SET payload=excluded.payload', (ident,json.dumps(payload)))
+        c.execute('DELETE FROM activity_participants WHERE activity_id=?', (ident,))
+        for student in participants.values():
+            c.execute('''INSERT INTO students VALUES(?,?,?,?,?) ON CONFLICT(nim) DO UPDATE SET
+                nama=excluded.nama,
+                prodi=CASE WHEN excluded.prodi<>'' THEN excluded.prodi ELSE students.prodi END,
+                fakultas=CASE WHEN excluded.fakultas<>'' THEN excluded.fakultas ELSE students.fakultas END,
+                kampus=CASE WHEN excluded.kampus<>'' THEN excluded.kampus ELSE students.kampus END''',
+                      (student.nim, student.nama, student.prodi, student.fakultas, student.kampus))
+            c.execute('INSERT INTO activity_participants VALUES(?,?)', (ident,student.nim))
+        write_surveys(c, ident, data.surveys, user, data.catatanSurvey)
+        audit(c,user,'save','activity',ident)
         return {'id':ident}
 
     @app.post('/api/dashboard/activities', status_code=201)
     def create(data: DashboardActivity, user=Depends(auth)):
         return save(data,user)
+
+    @app.post('/api/migrate/activities')
+    def migrate_activities(data: ActivityMigration, user=Depends(auth)):
+        for item in data.items:
+            allow(user,item.program)
+            if item.participants or item.surveys:
+                raise HTTPException(422,'Impor kegiatan hanya berisi data kegiatan; gunakan impor peserta/survei terpisah.')
+        created=skipped=0
+        with connect() as c:
+            c.execute('BEGIN IMMEDIATE')
+            keys={(normalized_name(row['nama_kegiatan']),row['tanggal'],row['program'])
+                  for row in c.execute('SELECT nama_kegiatan,tanggal,program FROM activities')}
+            for item in data.items:
+                key=(normalized_name(item.namaKegiatan),item.tanggal.isoformat(),item.program)
+                if key in keys:
+                    skipped+=1
+                    continue
+                save(item,user,connection=c)
+                keys.add(key)
+                created+=1
+            audit(c,user,'migrate_activities','migration',None)
+        return {'created':created,'skipped':skipped}
+
+    @app.post('/api/migrate/surveys')
+    def migrate_surveys(data: SurveyMigration, user=Depends(auth)):
+        if user['role']=='viewer':
+            raise HTTPException(403,'Akses baca saja')
+        def key(response):
+            record=response.model_dump(mode='json')
+            # Metadata spelling changes do not create a second response for the same NIM.
+            identity={k:record[k] for k in ('tanggalSurvey','submittedAt','nim','answers','saran')}
+            if not response.nim:
+                identity['nama']=normalized_name(response.nama)
+                if not response.submittedAt:
+                    identity['sourceKey']=response.sourceKey
+            if response.answers is None:
+                identity['scores']=[response.skorMateri,response.skorNarasumber,response.skorFasilitas,response.skorDampakKarakter]
+            return hashlib.sha256(json.dumps(identity,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+        created=skipped=0
+        with connect() as c:
+            c.execute('BEGIN IMMEDIATE')
+            grouped={}
+            for item in data.items:
+                row=c.execute('SELECT nama_kegiatan,program FROM activities WHERE id=?',(item.activityId,)).fetchone()
+                if not row or not visible(user,row['program']):
+                    raise HTTPException(422,f'Baris {item.sourceRow}: kegiatan tidak ditemukan atau tidak dapat diakses')
+                if item.namaKegiatan and normalized_name(item.namaKegiatan)!=normalized_name(row['nama_kegiatan']):
+                    raise HTTPException(422,f'Baris {item.sourceRow}: nama kegiatan tidak sesuai ID kegiatan')
+                grouped.setdefault(item.activityId,[]).append(item.response)
+            for ident, imported in grouped.items():
+                existing=[Survey.model_validate_json(row['payload']) for row in c.execute('SELECT payload FROM survey_responses WHERE activity_id=?',(ident,))]
+                keys={key(response) for response in existing}
+                additions=[]
+                for response in imported:
+                    fingerprint=key(response)
+                    if fingerprint in keys:
+                        skipped+=1
+                        continue
+                    additions.append(response)
+                    keys.add(fingerprint)
+                    created+=1
+                if additions:
+                    write_surveys(c,ident,existing+additions,user)
+            audit(c,user,'migrate_surveys','migration',None)
+        return {'created':created,'skipped':skipped,'activities':len(grouped)}
 
     @app.put('/api/dashboard/activities/{ident}')
     def update(ident: int, data: DashboardActivity, user=Depends(auth)):
