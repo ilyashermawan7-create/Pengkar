@@ -419,16 +419,13 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
           {/* SIDEBAR KIRI */}
           <aside className={`${sidebarOpen ? "flex" : "hidden"} md:flex fixed inset-y-0 left-0 z-40 md:static w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 shadow-sm min-h-screen`}>
             <div>
-              {/* Logo satuFramework v1.0.0 */}
+              {/* Branding sidebar */}
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <div className="w-3.5 h-3.5 rounded-full bg-[#D71920]"></div>
                   <span className="font-extrabold text-xl text-slate-900 tracking-tight">satu</span>
                   <span className="font-light text-xs text-slate-400">framework</span>
                 </div>
-                <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-bold">
-                  v1.0.0
-                </span>
               </div>
 
               {/* 4 MENU UTAMA */}
