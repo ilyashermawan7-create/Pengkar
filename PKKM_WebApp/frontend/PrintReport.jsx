@@ -2,6 +2,7 @@ import React from 'react';
 import {createPortal} from 'react-dom';
 import surveySchema from '../survey_schema.json';
 import {average} from './statistics.mjs';
+import {calculateCsi,csiMethod} from './csi.mjs';
 
 function Table({columns,rows,empty}) {
   return <table><thead><tr>{columns.map(column=><th key={column}>{column}</th>)}</tr></thead><tbody>
@@ -10,6 +11,7 @@ function Table({columns,rows,empty}) {
 }
 
 export default function PrintReport({activities,students,surveys,filters,preparedBy}) {
+  const csi=calculateCsi(surveys);
   const names=new Map(activities.map(a=>[a.id,a.namaKegiatan]));
   const grouped=new Map();
   for(const student of students){
@@ -24,6 +26,7 @@ export default function PrintReport({activities,students,surveys,filters,prepare
     <p>Filter: {filters.year} · {filters.quarter} · {filters.category}{filters.search?` · Pencarian: ${filters.search}`:''}</p>
     <p>Dicetak: {generatedAt} WIB · Oleh: {preparedBy}</p>
     <p className="report-summary">Ringkasan: {activities.length} kegiatan · {activities.reduce((sum,a)=>sum+a.jumlahPeserta,0)} kehadiran · {people.filter(student=>student.nim).length} mahasiswa unik teridentifikasi · {surveys.length} respons survei.</p>
+    <h2>CSI Bobot Setara{csi.provisional?' (sementara)':''}</h2><p>{csi.percent===null?'—':csi.percent.toFixed(2)+'%'} · {csi.status} · {csi.coverage}/20 pertanyaan terwakili.</p><p>{csiMethod}</p>
     <h2>Data Kegiatan</h2>
     <Table columns={['No.','Tanggal / TW','Nama Kegiatan','Program / Kategori','Peserta','Skor Survei','Narasumber','Eviden / Laporan']} empty="Tidak ada kegiatan sesuai filter yang dipilih." rows={activities.map((a,index)=>[
       index+1,`${a.tanggal||'—'} / ${a.triwulan||'—'} (Tahun ${a.tahun||'—'})`,a.namaKegiatan,`${a.program} / ${a.kategori}`,a.jumlahPeserta,

@@ -2,6 +2,7 @@ import {jsPDF} from 'jspdf';
 import {autoTable} from 'jspdf-autotable';
 import surveySchema from '../survey_schema.json';
 import {average} from './statistics.mjs';
+import {calculateCsi,csiMethod} from './csi.mjs';
 
 let fontPromise;
 async function reportFont() {
@@ -68,6 +69,9 @@ export async function downloadReportPdf({activities,students,surveys,filters,pre
     s.tanggalSurvey,names.get(s.activityId),s.nim||'—',s.skorMateri,s.skorNarasumber,s.skorFasilitas,s.skorDampakKarakter,s.saran||'—',
   ]));
   const satisfaction=surveys.filter(response=>response.answers?.length===20);
+  const csi=calculateCsi(surveys);
+  table('Indeks Kepuasan CSI Bobot Setara',['CSI (%)','Kategori','Cakupan pertanyaan','Keterangan'],[[csi.percent===null?'—':csi.percent.toFixed(2)+'%',csi.status,`${csi.coverage}/20`,csiMethod]]);
+  table('Rincian Perhitungan CSI',['No.','MSS / 5','WF (%)','WS'],csi.items.map(item=>[item.index+1,item.mss===null?'—':item.mss.toFixed(4),item.weight===null?'—':(item.weight*100).toFixed(2),item.weightedScore===null?'—':item.weightedScore.toFixed(4)]));
   if(satisfaction.length)table('Survei Kepuasan — Pertanyaan Asli',['No.','Pertanyaan','Respons','Rerata / 5','Persentase'],surveySchema.questions.map((question,index)=>{
     const values=satisfaction.map(response=>response.answers[index]).filter(value=>value!==null);
     const mean=average(values);

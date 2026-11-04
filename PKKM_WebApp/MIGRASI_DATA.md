@@ -225,3 +225,20 @@ Pada setiap kelompok peserta maupun survei, kolom **Cari kegiatan tujuan**
 menyaring pilihan berdasarkan nama, tanggal (YYYY-MM-DD), tahun, program,
 atau ID. Beberapa kata pencarian dapat digabungkan, misalnya nama dan tahun.
 Pilihan tujuan yang sudah dipilih tetap dipertahankan saat pencarian berubah.
+
+## Perhitungan CSI kepuasan
+
+Dashboard, ekspor jawaban Excel (sheet Perhitungan CSI / Metode CSI), dan PDF
+menggunakan CSI dengan asumsi bobot setara, karena instrumen asli belum
+mengumpulkan nilai kepentingan. Pertanyaan dan jawaban asli tidak diubah.
+MSS dihitung per pertanyaan dari jawaban valid skala 1–5, WF = 1/k,
+WS = WF × MSS, dan CSI = jumlah WS / 5 × 100%. Dengan 20 pertanyaan
+terwakili, setiap bobot adalah 5%. Format survei lama tidak dicampur.
+
+Kolom kosong diabaikan, bukan diisi nol. Jika sebagian pertanyaan sama sekali
+belum memiliki nilai, bobot dinormalisasi ke k pertanyaan yang terwakili dan
+hasil ditandai sementara, disertai cakupan k/20. Kategori operasional:
+≤35% tidak puas; >35–50% kurang puas; >50–65% cukup puas;
+>65–80% puas; >80% sangat puas. Ini konvensi pelaporan, bukan standar universal.
+CSI berbobot kepentingan memerlukan data MIS tersendiri; bobot tersebut
+belum tersedia dan tidak direkayasa dari nilai kepuasan.

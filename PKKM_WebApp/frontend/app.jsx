@@ -10,6 +10,7 @@ import MigrationPanel from './MigrationPanel.jsx';
 import SurveySummary from './SurveySummary.jsx';
 import surveySchema from '../survey_schema.json';
 import {average} from './statistics.mjs';
+import {calculateCsi,csiMethod} from './csi.mjs';
 import {dashboardMetrics,activityGroup,activityGroupLabels} from './dashboardMetrics.mjs';
 import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './migration.mjs';
 
@@ -121,16 +122,11 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const visibleIds = new Set(filteredActivities.map(a=>a.id));
       const filteredStudents=students.filter(s=>visibleIds.has(s.activityId));
       const filteredSurveys=surveys.filter(s=>visibleIds.has(s.activityId));
-      const fullSurveys=filteredSurveys.filter(s=>s.answers?.length===20);
-      const measuredSurveys=fullSurveys.length?fullSurveys:filteredSurveys;
       const years=[...new Set([...activities.map(a=>a.tahun).filter(Boolean),String(new Date().getFullYear())])].sort().reverse();
       const categories=[...new Set(['Pengembangan Karakter','Pengkar Asrama','Wawasan Kebangsaan','Konseling','Kesehatan Mental','PPKPT',...activities.map(a=>a.kategori)])];
       const mean = average;
-      const surveyMetrics=surveySchema.groups.map(({label,field:key})=>{
-        const value=mean(measuredSurveys.map(s=>s[key]).filter(value=>value!==null&&value!==undefined));
-        return {label,val:value===null?'—':(value*20).toFixed(1)+'%',skor:value===null?'—':value.toFixed(2),status:value===null?'Belum ada respons':value>=4.5?'Sangat Memuaskan':value>=3.5?'Memuaskan':'Perlu Perbaikan'};
-      });
-      const satisfaction=mean(measuredSurveys.map(s=>s.skorTotal));
+      const csi=calculateCsi(filteredSurveys);
+      const surveyMetrics=csi.groups.map(group=>({label:group.label,val:group.percent===null?'—':group.percent.toFixed(1)+'%',skor:group.score===null?'—':group.score.toFixed(2),status:group.status}));
       const facultyCounts=Object.entries([...new Map(filteredStudents.map(s=>[s.nim||s.directoryId,s])).values()].reduce((acc,s)=>{const key=s.fakultas||'Belum diisi';acc[key]=(acc[key]||0)+1;return acc;},{})).sort((a,b)=>b[1]-a[1]);
 
       // Ref Chart Dashboard
@@ -692,11 +688,12 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                       <p className="text-xs text-slate-500">
                         Evaluasi komprehensif berdasarkan {filteredSurveys.length} respons mahasiswa peserta kegiatan pembinaan karakter.
                       </p>
-                      <p className="text-xs text-slate-500 mt-1">{fullSurveys.length?`Indeks memakai ${fullSurveys.length} respons instrumen 20 pertanyaan; nilai kosong diabaikan dan format lama tidak dicampur.`:'Belum ada respons 20 pertanyaan. Ringkasan format lama ditampilkan bila tersedia.'}</p>
+                      <p className="text-xs text-slate-500 mt-1">{csi.responses} respons instrumen 20 pertanyaan · {csi.coverage}/20 pertanyaan memiliki nilai. {csi.provisional?'Hasil sementara; data belum lengkap.':'Seluruh pertanyaan terwakili.'}</p>
+                      <details className="text-xs text-slate-500 mt-2"><summary className="cursor-pointer">Metode perhitungan CSI dan kategori</summary><p>{csiMethod}</p><p>Kategori operasional skala 1–5: ≤35% tidak puas; &gt;35–50% kurang puas; &gt;50–65% cukup puas; &gt;65–80% puas; &gt;80% sangat puas. Ambang kategori adalah konvensi pelaporan, bukan standar universal.</p></details>
                     </div>
                     <div className="text-right bg-red-50 p-3 rounded-2xl border border-red-100">
-                      <span className="text-[10px] font-bold text-[#D71920] block uppercase tracking-wider">Indeks Kepuasan Total</span>
-                      <span className="text-3xl font-black text-slate-900">{satisfaction===null?"—":satisfaction.toFixed(2)} <span className="text-sm font-semibold text-slate-400">/ 5.0</span></span>
+                      <span className="text-[10px] font-bold text-[#D71920] block uppercase tracking-wider">CSI Bobot Setara{csi.provisional?' (sementara)':''}</span>
+                      <span className="text-3xl font-black text-slate-900">{csi.percent===null?"—":csi.percent.toFixed(2)+"%"}</span><p className="text-xs text-slate-500">{csi.status} · MSS {csi.score===null?'—':csi.score.toFixed(2)} / 5</p>
                     </div>
                   </div>
 

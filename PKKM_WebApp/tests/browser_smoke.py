@@ -191,7 +191,7 @@ def main():
                 page.reload()
                 expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
                 expect(page.get_by_text('Total Kegiatan',exact=True).locator('..')).to_contain_text('1')
-                expect(page.get_by_text('Indeks Kepuasan Total',exact=True).locator('..')).to_contain_text('4.00')
+                expect(page.get_by_text('CSI Bobot Setara (sementara)',exact=True).first.locator('..')).to_contain_text('Belum ada nilai')
                 page.get_by_label('Cari Mahasiswa Berdasarkan NIM / Kegiatan',exact=True).fill('not-found')
                 expect(page.get_by_text('Total Kegiatan',exact=True).locator('..')).to_contain_text('0')
                 page.get_by_role('button',name='Reset Filter',exact=True).click()
@@ -225,7 +225,7 @@ def main():
                 page.reload()
                 expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
                 expect(page.get_by_text('Total Kegiatan',exact=True).locator('..')).to_contain_text('1')
-                expect(page.get_by_text('Indeks Kepuasan Total',exact=True).locator('..')).to_contain_text('4.00')
+                expect(page.get_by_text('CSI Bobot Setara (sementara)',exact=True).first.locator('..')).to_contain_text('Belum ada nilai')
                 print('PASS: persisted database, survey responses, and session survive server restart')
                 page.get_by_role('button',name='Pengaturan Admin',exact=False).click()
                 page.get_by_label('Username Admin *',exact=True).fill('operatoruji')
@@ -306,6 +306,10 @@ def main():
                 survey_summary=page.get_by_role('region',name='Survei kepuasan 20 pertanyaan',exact=True)
                 expect(survey_summary.get_by_text(schema['questions'][0],exact=True)).to_be_visible()
                 expect(survey_summary).to_contain_text('2 respons instrumen 20 pertanyaan')
+                item_means=[sum(values)/len(values) for i in range(20) if (values:=[r['answers'][i] for r in full if r['answers'][i] is not None])]
+                expected_csi=sum(item_means)/len(item_means)/5*100
+                expect(survey_summary).to_contain_text(f'{expected_csi:.2f}%')
+                expect(survey_summary).to_contain_text('20/20 pertanyaan terwakili')
                 with page.expect_download() as exported20:
                     survey_summary.get_by_role('button',name='Ekspor Jawaban Survei Kepuasan',exact=True).click()
                 subprocess.run(['node','--input-type=module','-e',inspect_script,exported20.value.path()],cwd=ROOT,check=True)
