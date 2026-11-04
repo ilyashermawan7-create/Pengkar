@@ -228,20 +228,19 @@ Pilihan tujuan yang sudah dipilih tetap dipertahankan saat pencarian berubah.
 
 ## Perhitungan CSI kepuasan
 
-Dashboard, ekspor jawaban Excel (sheet Perhitungan CSI / Metode CSI), dan PDF
-menggunakan CSI dengan asumsi bobot setara, karena instrumen asli belum
-mengumpulkan nilai kepentingan. Pertanyaan dan jawaban asli tidak diubah.
-MSS dihitung per pertanyaan dari jawaban valid skala 1–5, WF = 1/k,
-WS = WF × MSS, dan CSI = jumlah WS / 4 × 100%. Dengan 20 pertanyaan
-terwakili, setiap bobot adalah 5%. Format survei lama tidak dicampur.
+Dashboard, Excel, dan PDF menggunakan bobot setara per pertanyaan.
+MSS dihitung dari jawaban valid; WF = 1/k; WS = WF × MSS.
+CSI = Σ(WF × MSS / pembagi pertanyaan) × 100%.
 
-Kolom kosong diabaikan, bukan diisi nol. Jika sebagian pertanyaan sama sekali
-belum memiliki nilai, bobot dinormalisasi ke k pertanyaan yang terwakili dan
-hasil ditandai sementara, disertai cakupan k/20. Kategori operasional:
-≤35% tidak puas; >35–50% kurang puas; >50–65% cukup puas;
->65–80% puas; >80% sangat puas. Ini konvensi pelaporan, bukan standar universal.
-CSI berbobot kepentingan memerlukan data MIS tersendiri; bobot tersebut
-belum tersedia dan tidak direkayasa dari nilai kepuasan.
+Pembagi 5 berlaku untuk Pemahaman dan relevansi materi (pertanyaan 1, 2, 3)
+dan Kepuasan terhadap narasumber (pertanyaan 4, 20). Pembagi 4 berlaku
+untuk seluruh pertanyaan pada tiga kelompok lainnya. Total mengikuti
+normalisasi per pertanyaan, bukan rata-rata lima persentase kelompok.
+Excel dan PDF menyertakan pembagi serta kontribusi setiap pertanyaan.
 
-Pembagi CSI ditetapkan 4. Nilai jawaban asli tetap dipertahankan; hasil tidak
-dibatasi otomatis ke 100% jika rerata jawaban melebihi 4.
+Jawaban asli tidak diubah, format lama tidak dicampur, nilai kosong diabaikan.
+Hasil ditandai sementara jika belum semua 20 pertanyaan memiliki jawaban;
+bobot dinormalisasi pada pertanyaan terwakili. Nilai dapat melebihi 100%
+jika rerata melebihi pembagi. Bobot kepentingan MIS belum tersedia.
+Kategori operasional: ≤35% tidak puas; >35–50% kurang puas; >50–65% cukup puas;
+>65–80% puas; >80% sangat puas (konvensi pelaporan, bukan standar universal).

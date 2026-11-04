@@ -126,7 +126,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const categories=[...new Set(['Pengembangan Karakter','Pengkar Asrama','Wawasan Kebangsaan','Konseling','Kesehatan Mental','PPKPT',...activities.map(a=>a.kategori)])];
       const mean = average;
       const csi=calculateCsi(filteredSurveys);
-      const surveyMetrics=csi.groups.map(group=>({label:group.label,val:group.percent===null?'—':group.percent.toFixed(1)+'%',skor:group.score===null?'—':group.score.toFixed(2),status:group.status}));
+      const surveyMetrics=csi.groups.map(group=>({label:group.label,divisor:group.divisor,val:group.percent===null?'—':group.percent.toFixed(1)+'%',skor:group.score===null?'—':group.score.toFixed(2),status:group.status}));
       const facultyCounts=Object.entries([...new Map(filteredStudents.map(s=>[s.nim||s.directoryId,s])).values()].reduce((acc,s)=>{const key=s.fakultas||'Belum diisi';acc[key]=(acc[key]||0)+1;return acc;},{})).sort((a,b)=>b[1]-a[1]);
 
       // Ref Chart Dashboard
@@ -693,7 +693,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                     </div>
                     <div className="text-right bg-red-50 p-3 rounded-2xl border border-red-100">
                       <span className="text-[10px] font-bold text-[#D71920] block uppercase tracking-wider">CSI Bobot Setara{csi.provisional?' (sementara)':''}</span>
-                      <span className="text-3xl font-black text-slate-900">{csi.percent===null?"—":csi.percent.toFixed(2)+"%"}</span><p className="text-xs text-slate-500">{csi.status} · MSS {csi.score===null?'—':csi.score.toFixed(2)} · Pembagi CSI 4</p>
+                      <span className="text-3xl font-black text-slate-900">{csi.percent===null?"—":csi.percent.toFixed(2)+"%"}</span><p className="text-xs text-slate-500">{csi.status} · MSS {csi.score===null?'—':csi.score.toFixed(2)} · Pembagi sesuai kelompok</p>
                     </div>
                   </div>
 
@@ -703,7 +703,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                         <span className="text-xs font-semibold text-slate-500 block">{item.label}</span>
                         <div className="flex items-baseline justify-between mt-2">
                           <span className="text-2xl font-black text-slate-900">{item.val}</span>
-                          <span className="text-xs bg-red-50 text-[#D71920] font-bold px-2 py-0.5 rounded">★ {item.skor}</span>
+                          <span className="text-xs bg-red-50 text-[#D71920] font-bold px-2 py-0.5 rounded">★ {item.skor} / {item.divisor}</span>
                         </div>
                         <span className="text-[10px] text-emerald-600 font-bold block mt-1">Status: {item.status}</span>
                       </div>
