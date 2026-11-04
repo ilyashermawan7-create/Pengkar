@@ -139,3 +139,24 @@ export async function readDirectory(file){
 export function downloadDirectoryTemplate(){
   download([{'NIM':'','Nama Mahasiswa':'','Program Studi':'','Fakultas':'','Kampus':''}],'Master Mahasiswa','Template_Master_Mahasiswa.xlsx');
 }
+
+export async function readActivityParticipants(file){
+  const {data,get,rowNumber}=await readSpreadsheet(file,'directory');
+  const hash=await globalThis.crypto.subtle.digest('SHA-256',await file.arrayBuffer());
+  const fingerprint=Array.from(new Uint8Array(hash),byte=>byte.toString(16).padStart(2,'0')).join('');
+  return data.map(row=>{
+    const student=Object.fromEntries(['nim','nama','prodi','fakultas','kampus'].map(key=>[key,get(row,key)]));
+    if(student.nim&&!/^\d{6,30}$/.test(student.nim))throw Error(`Baris ${rowNumber(row)}: NIM terisi harus 6–30 angka; kosong diperbolehkan.`);
+    const ident=get(row,'idkegiatan','activityid');
+    if(ident&&(!/^\d+$/.test(ident)||Number(ident)<1))throw Error(`Baris ${rowNumber(row)}: ID kegiatan tidak valid.`);
+    const date=get(row,'tanggalkegiatan','tanggalpelaksanaan');
+    const importKey=fingerprint+':'+rowNumber(row);
+    return {activityId:ident?Number(ident):null,namaKegiatan:get(row,'namakegiatan'),tanggalKegiatan:date?parseDate(date,rowNumber(row),'Tanggal kegiatan'):'',sourceRow:rowNumber(row),importKey,
+      student:{...student,directoryId:get(row,'idmaster'),sourceKey:importKey}};
+  });
+}
+
+export function downloadParticipantTemplate(){
+  download([{'ID Kegiatan':'','Nama Kegiatan':'','Tanggal Kegiatan':'','NIM':'','Nama Mahasiswa':'','Program Studi':'','Fakultas':'','Kampus':''}],
+    'Peserta Kegiatan','Template_Migrasi_Peserta_Kegiatan.xlsx');
+}

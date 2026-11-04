@@ -28,6 +28,10 @@ lama, akun dan password yang sudah tersimpan tetap dipakai.
   kehadiran kegiatan. Nilai kosong survei memakai `null`, dan tanggal
   kegiatan yang belum diketahui memakai string kosong pada tabel lama
   dengan metadata Tahun tersendiri; tidak dibuat tanggal perkiraan.
+- Migrasi peserta menambah relasi `activity_participants` tanpa mengganti
+  daftar lama. Data tanpa NIM memakai `activity_unidentified_participants`
+  dengan referensi master; pencocokan yang tertunda memakai
+  `pending_participants`. Semua diperiksa menurut hak akses program.
 - Endpoint lama yang masih dipertahankan: `server.py`.
 
 Setelah mengedit frontend, bangun aset dan commit hasilnya:
@@ -119,6 +123,8 @@ Rekap mahasiswa menyediakan pilihan 10, 50, dan Semua, navigasi Sebelumnya /
 Berikutnya, serta pencarian. Jumlah baris layar tidak membatasi ekspor Excel
 maupun PDF. `frontend/PrintReport.jsx` tetap menyediakan tampilan khusus cetak
 untuk Ctrl+P, tetapi bukan jalur tombol unduh PDF.
+Tabel kegiatan pada `frontend/app.jsx` juga menyediakan pagination 10/50/Semua
+dengan reset halaman saat filter berubah, terpisah dari dataset ekspor penuh.
 
 Halaman utama dikirim dengan `Cache-Control: no-store`. Build menambahkan
 hash konten pada URL aset JS/CSS di `static/index.html` agar versi kode dan

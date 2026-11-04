@@ -26,8 +26,9 @@ export async function downloadReportPdf({activities,students,surveys,filters,pre
   const names=new Map(activities.map(activity=>[activity.id,activity.namaKegiatan]));
   const grouped=new Map();
   for(const student of students){
-    if(!grouped.has(student.nim))grouped.set(student.nim,{...student,kegiatan:new Map()});
-    grouped.get(student.nim).kegiatan.set(student.activityId,names.get(student.activityId)||'Kegiatan');
+    const identity=student.nim||student.directoryId;
+    if(!grouped.has(identity))grouped.set(identity,{...student,kegiatan:new Map()});
+    grouped.get(identity).kegiatan.set(student.activityId,names.get(student.activityId)||'Kegiatan');
   }
   const people=[...grouped.values()].sort((a,b)=>a.nama.localeCompare(b.nama,'id'));
   const timestamp=new Intl.DateTimeFormat('id-ID',{dateStyle:'long',timeStyle:'short',timeZone:'Asia/Jakarta'}).format(new Date());
@@ -40,7 +41,7 @@ export async function downloadReportPdf({activities,students,surveys,filters,pre
   for(const text of [
     `Filter: ${filters.year} · ${filters.quarter} · ${filters.category}${filters.search?` · Pencarian: ${filters.search}`:''}`,
     `Dibuat: ${timestamp} WIB · Oleh: ${preparedBy}`,
-    `Ringkasan: ${activities.length} kegiatan · ${activities.reduce((sum,a)=>sum+a.jumlahPeserta,0)} kehadiran · ${people.length} mahasiswa unik · ${surveys.length} respons survei.`,
+    `Ringkasan: ${activities.length} kegiatan · ${activities.reduce((sum,a)=>sum+a.jumlahPeserta,0)} kehadiran · ${people.filter(student=>student.nim).length} mahasiswa unik · ${surveys.length} respons survei.`,
   ]){
     const lines=doc.splitTextToSize(text,273);doc.text(lines,12,y);y+=lines.length*4+2;
   }

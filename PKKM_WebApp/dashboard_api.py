@@ -65,6 +65,14 @@ def initialize(connect):
             CREATE TABLE IF NOT EXISTS pending_surveys (
                 record_key TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), payload TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS activity_unidentified_participants (
+                activity_id INTEGER NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+                record_key TEXT NOT NULL REFERENCES student_directory(record_key),
+                PRIMARY KEY(activity_id,record_key)
+            );
+            CREATE TABLE IF NOT EXISTS pending_participants (
+                record_key TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), payload TEXT NOT NULL
+            );
         ''')
 
 
@@ -202,6 +210,20 @@ class ResolveSurvey(Input):
     activityId: int = Field(gt=0)
 
 
+class ParticipantMigrationRow(Input):
+    activityId: int | None = Field(default=None,gt=0)
+    namaKegiatan: str = Field(default='',max_length=200)
+    tanggalKegiatan: str = Field(default='',max_length=10)
+    sourceRow: int = Field(default=0,ge=0)
+    importKey: str = Field(default='',max_length=100)
+    unresolved: str = Field(default='',max_length=1000)
+    student: DirectoryStudent
+
+
+class ParticipantMigration(Input):
+    items: list[ParticipantMigrationRow] = Field(min_length=1,max_length=10000)
+
+
 def register(app, connect, auth, allow, audit, hash_password, check_password):
     def visible(user, program):
         return user['role'] not in ('pengkar', 'asrama') or program == ('Asrama' if user['role'] == 'asrama' else 'Pengembangan Karakter')
@@ -250,6 +272,8 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
                 survey['namaKegiatan'] = names[survey['activityId']]
             students = [dict(r) for r in c.execute('''SELECT s.*,p.activity_id AS activityId
                 FROM activity_participants p JOIN students s ON s.nim=p.nim''') if r['activityId'] in ids]
+            students.extend(dict(row,directoryId=row['record_key']) for row in c.execute('''SELECT d.*,p.activity_id AS activityId
+                FROM activity_unidentified_participants p JOIN student_directory d ON d.record_key=p.record_key''') if row['activityId'] in ids)
             master=[]
             if user['role'] in ('admin','operator'):
                 directory=[dict(r) for r in c.execute('SELECT * FROM student_directory ORDER BY nama,record_key')]
@@ -257,12 +281,13 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
                 master=[dict(row,directoryId=row['record_key']) for row in directory]
                 master.extend(dict(row,directoryId='nim:'+row['nim']) for row in c.execute('SELECT * FROM students') if row['nim'] not in known)
             pending=[dict(id=row['record_key'],**json.loads(row['payload'])) for row in c.execute('SELECT * FROM pending_surveys WHERE user_id=?',(user['id'],))]
+            pending_participants=[dict(id=row['record_key'],**json.loads(row['payload'])) for row in c.execute('SELECT * FROM pending_participants WHERE user_id=?',(user['id'],))]
             users = []
             if user['role'] == 'admin':
                 users = [dict(id=r['id'], username=r['username'], nama=r['full_name'], email=r['email'],
                               role=r['dashboard_role'] or r['role'], status='Aktif' if r['active'] else 'Nonaktif')
                          for r in c.execute('SELECT * FROM users ORDER BY id')]
-            return dict(activities=activities, students=students, masterStudents=master,pendingSurveys=pending,surveys=surveys, adminList=users, profile=profile(user))
+            return dict(activities=activities, students=students, masterStudents=master,pendingSurveys=pending,pendingParticipants=pending_participants,surveys=surveys, adminList=users, profile=profile(user))
 
     def write_surveys(c, ident, surveys, user, notes=''):
         previous = c.execute('SELECT count(*) FROM survey_responses WHERE activity_id=?', (ident,)).fetchone()[0]
@@ -285,8 +310,8 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
     def save(data, user, ident=None, connection=None):
         allow(user, data.program)
         participants = {s.nim: s for s in data.participants}
-        if participants and data.jumlahPeserta != len(participants):
-            raise HTTPException(422, 'Jumlah peserta harus sama dengan jumlah NIM unik pada berkas peserta.')
+        if participants and data.jumlahPeserta is not None and data.jumlahPeserta < len(participants):
+            raise HTTPException(422, 'Jumlah peserta tidak boleh lebih kecil dari jumlah NIM unik pada berkas peserta.')
         if connection is None:
             with connect() as c:
                 c.execute('BEGIN IMMEDIATE')
@@ -351,12 +376,95 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
                 c.execute('''INSERT INTO student_directory VALUES(?,?,?,?,?,?) ON CONFLICT(record_key) DO UPDATE SET
                     nim=excluded.nim,nama=excluded.nama,prodi=excluded.prodi,fakultas=excluded.fakultas,kampus=excluded.kampus''',
                     (record_key,*(merged[field] for field in fields)))
-                if specified and specified['record_key']!=record_key:c.execute('DELETE FROM student_directory WHERE record_key=?',(specified['record_key'],))
                 if student.nim:
                     c.execute('''INSERT INTO students VALUES(?,?,?,?,?) ON CONFLICT(nim) DO UPDATE SET
                         nama=excluded.nama,prodi=excluded.prodi,fakultas=excluded.fakultas,kampus=excluded.kampus''',tuple(merged[field] for field in fields))
+                if specified and specified['record_key']!=record_key:
+                    for link in c.execute('SELECT activity_id FROM activity_unidentified_participants WHERE record_key=?',(specified['record_key'],)).fetchall():
+                        c.execute('INSERT INTO activity_participants VALUES(?,?) ON CONFLICT DO NOTHING',(link['activity_id'],merged['nim']))
+                    c.execute('DELETE FROM activity_unidentified_participants WHERE record_key=?',(specified['record_key'],))
+                    c.execute('DELETE FROM student_directory WHERE record_key=?',(specified['record_key'],))
             audit(c,user,'migrate_students','migration',None)
         return {'created':created,'updated':updated,'skipped':skipped}
+
+    def apply_participants(c,items,user):
+        allow(user)
+        added=skipped=pending_count=0
+        touched=set()
+        for item in items:
+            values={key:getattr(item.student,key) for key in ('nim','nama','prodi','fakultas','kampus')}
+            if not any(values.values()):
+                skipped+=1
+                continue
+            if item.activityId is None:
+                payload=item.model_dump(mode='json')
+                record_key=hashlib.sha256((str(user['id'])+':'+(item.importKey or json.dumps(payload,sort_keys=True))).encode()).hexdigest()
+                c.execute('INSERT INTO pending_participants VALUES(?,?,?) ON CONFLICT(record_key) DO NOTHING',(record_key,user['id'],json.dumps(payload)))
+                pending_count+=1
+                continue
+            activity=c.execute('SELECT * FROM activities WHERE id=?',(item.activityId,)).fetchone()
+            if not activity:raise HTTPException(422,f'Baris {item.sourceRow}: kegiatan tidak ditemukan')
+            allow(user,activity['program'])
+            if item.namaKegiatan and normalized_name(item.namaKegiatan)!=normalized_name(activity['nama_kegiatan']):
+                raise HTTPException(422,f'Baris {item.sourceRow}: nama kegiatan tidak sesuai ID kegiatan')
+            specified=c.execute('SELECT * FROM student_directory WHERE record_key=?',(item.student.directoryId,)).fetchone() if item.student.directoryId else None
+            if item.student.directoryId and not specified:raise HTTPException(422,f'Baris {item.sourceRow}: ID Master tidak ditemukan')
+            if specified:
+                values={key:values[key] or specified[key] for key in values}
+                item.student.nim=values['nim']
+            if item.student.nim:
+                cached=c.execute('SELECT * FROM students WHERE nim=?',(item.student.nim,)).fetchone()
+                directory=c.execute('SELECT * FROM student_directory WHERE record_key=?',('nim:'+item.student.nim,)).fetchone()
+                merged={key:values[key] or next((row[key] for row in (cached,directory) if row and row[key]),'') for key in values}
+                c.execute('''INSERT INTO students VALUES(?,?,?,?,?) ON CONFLICT(nim) DO UPDATE SET
+                    nama=excluded.nama,prodi=excluded.prodi,fakultas=excluded.fakultas,kampus=excluded.kampus''',tuple(merged.values()))
+                result=c.execute('INSERT INTO activity_participants VALUES(?,?) ON CONFLICT DO NOTHING',(item.activityId,item.student.nim))
+            else:
+                source=item.student.sourceKey or item.importKey or hashlib.sha256(json.dumps(values,sort_keys=True).encode()).hexdigest()
+                record_key=specified['record_key'] if specified else 'source:'+source
+                existing=c.execute('SELECT * FROM student_directory WHERE record_key=?',(record_key,)).fetchone()
+                merged={key:values[key] or (existing[key] if existing else '') for key in values}
+                c.execute('''INSERT INTO student_directory VALUES(?,?,?,?,?,?) ON CONFLICT(record_key) DO UPDATE SET
+                    nama=excluded.nama,prodi=excluded.prodi,fakultas=excluded.fakultas,kampus=excluded.kampus''',(record_key,*merged.values()))
+                result=c.execute('INSERT INTO activity_unidentified_participants VALUES(?,?) ON CONFLICT DO NOTHING',(item.activityId,record_key))
+            if result.rowcount:added+=1
+            else:skipped+=1
+            touched.add(item.activityId)
+        for ident in touched:
+            count=c.execute('SELECT count(*) FROM activity_participants WHERE activity_id=?',(ident,)).fetchone()[0]
+            count+=c.execute('SELECT count(*) FROM activity_unidentified_participants WHERE activity_id=?',(ident,)).fetchone()[0]
+            current=c.execute('SELECT jumlah_peserta FROM activities WHERE id=?',(ident,)).fetchone()[0]
+            count=max(count,current)
+            c.execute('UPDATE activities SET jumlah_peserta=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(count,ident))
+            details=c.execute('SELECT payload FROM activity_details WHERE activity_id=?',(ident,)).fetchone()
+            payload=json.loads(details['payload']) if details else {}
+            payload['jumlahPeserta']=count
+            c.execute('INSERT INTO activity_details VALUES(?,?) ON CONFLICT(activity_id) DO UPDATE SET payload=excluded.payload',(ident,json.dumps(payload)))
+        return {'created':added,'skipped':skipped,'pending':pending_count,'activities':len(touched)}
+
+    @app.post('/api/migrate/participants')
+    def migrate_participants(data: ParticipantMigration,user=Depends(auth)):
+        with connect() as c:
+            c.execute('BEGIN IMMEDIATE')
+            result=apply_participants(c,data.items,user)
+            audit(c,user,'migrate_participants','migration',None)
+        return result
+
+    @app.post('/api/migrate/participants/pending/{record_key}/resolve')
+    def resolve_pending_participants(record_key: str,data: ResolveSurvey,user=Depends(auth)):
+        with connect() as c:
+            c.execute('BEGIN IMMEDIATE')
+            record=c.execute('SELECT * FROM pending_participants WHERE record_key=? AND user_id=?',(record_key,user['id'])).fetchone()
+            target=c.execute('SELECT * FROM activities WHERE id=?',(data.activityId,)).fetchone()
+            if not record:raise HTTPException(404,'Peserta tertunda tidak ditemukan')
+            if not target:raise HTTPException(422,'Kegiatan tidak ditemukan')
+            item=ParticipantMigrationRow.model_validate_json(record['payload'])
+            item.activityId=data.activityId
+            item.namaKegiatan=target['nama_kegiatan']
+            result=apply_participants(c,[item],user)
+            c.execute('DELETE FROM pending_participants WHERE record_key=?',(record_key,))
+            audit(c,user,'resolve_participant','activity',data.activityId)
+        return result
 
     @app.post('/api/migrate/activities')
     def migrate_activities(data: ActivityMigration, user=Depends(auth)):

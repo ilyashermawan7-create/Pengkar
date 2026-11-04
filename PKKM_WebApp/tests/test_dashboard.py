@@ -21,7 +21,7 @@ class DashboardTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(server.app)
         with server.connect() as c:
-            for table in ('pending_surveys','student_directory','survey_responses','activity_participants','activity_details','students',
+            for table in ('pending_participants','activity_unidentified_participants','pending_surveys','student_directory','survey_responses','activity_participants','activity_details','students',
                           'evaluations','activities','audit','sessions','users'):
                 c.execute(f'DELETE FROM {table}')
             c.execute('INSERT INTO users(username,password_hash,full_name,role) VALUES(?,?,?,?)',
@@ -92,7 +92,7 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(self.snapshot()['students'],[])
 
     def test_invalid_import_does_not_partially_save(self):
-        for data in (self.activity(jumlahPeserta=2),self.activity(surveys=[{
+        for data in (self.activity(jumlahPeserta=0),self.activity(surveys=[{
             'tanggalSurvey':'2026-11-04','skorMateri':6,'skorNarasumber':4,
             'skorFasilitas':4,'skorDampakKarakter':4}]), self.activity(tanggal='2026-02-30')):
             response = self.client.post('/api/dashboard/activities',headers=self.headers,json=data)
@@ -357,6 +357,67 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(self.snapshot()['pendingSurveys'],[])
         self.assertEqual(self.snapshot()['surveys'][0]['activityId'],ident)
         self.assertEqual(self.snapshot()['surveys'][0]['skorTotal'],5)
+
+    def test_participant_migration_adds_without_replacing_existing_and_is_idempotent(self):
+        ident=self.create(self.activity(jumlahPeserta=50,surveys=[]))
+        items=[{'activityId':ident,'namaKegiatan':'Kegiatan uji','student':{'nim':'000000000002','nama':'Peserta Kedua'}},
+               {'activityId':ident,'student':{'nim':'000000000002','nama':'Peserta Kedua'}}]
+        result=self.client.post('/api/migrate/participants',headers=self.headers,json={'items':items})
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(result.json()['created'],1)
+        self.assertEqual(result.json()['skipped'],1)
+        data=self.snapshot()
+        self.assertEqual(len(data['students']),2)
+        self.assertEqual(data['activities'][0]['jumlahPeserta'],50)
+        result=self.client.post('/api/migrate/participants',headers=self.headers,json={'items':items})
+        self.assertEqual(result.json()['created'],0)
+        self.assertEqual(result.json()['skipped'],2)
+
+    def test_participant_without_nim_is_retained_and_can_receive_nim_via_master(self):
+        ident=self.create(self.activity(participants=[],jumlahPeserta=None,surveys=[]))
+        items=[{'activityId':ident,'importKey':'file:2','student':{'nama':'Tanpa NIM','sourceKey':'file:2'}}]
+        result=self.client.post('/api/migrate/participants',headers=self.headers,json={'items':items})
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(result.json()['created'],1)
+        data=self.snapshot()
+        self.assertEqual(data['students'][0]['nim'],'')
+        self.assertEqual(data['activities'][0]['jumlahPeserta'],1)
+        record=data['students'][0]['directoryId']
+        result=self.client.post('/api/migrate/students',headers=self.headers,json={'items':[{'directoryId':record,'nim':'000000000002'}]})
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(self.snapshot()['students'][0]['nim'],'000000000002')
+        self.assertEqual(self.snapshot()['students'][0]['nama'],'Tanpa NIM')
+
+    def test_participant_migration_checks_program_and_rolls_back_whole_batch(self):
+        ident=self.create(self.activity(participants=[],surveys=[]))
+        other=self.create(self.activity(program='Asrama',participants=[],surveys=[]))
+        _,headers=self.new_user('participant-pengkar','pengkar')
+        items=[{'activityId':activity,'student':{'nim':'000000000003','nama':'Uji'}} for activity in (ident,other)]
+        result=self.client.post('/api/migrate/participants',headers=headers,json={'items':items})
+        self.assertEqual(result.status_code,403,result.text)
+        self.assertEqual(self.snapshot()['students'],[])
+
+    def test_unmatched_participant_can_be_saved_and_linked_later(self):
+        items=[{'importKey':'participant:2','student':{'nim':'000000000004','nama':'Belum Cocok'}}]
+        result=self.client.post('/api/migrate/participants',headers=self.headers,json={'items':items})
+        self.assertEqual(result.json()['pending'],1)
+        self.client.post('/api/migrate/participants',headers=self.headers,json={'items':items})
+        data=self.snapshot()
+        self.assertEqual(len(data['pendingParticipants']),1)
+        self.assertEqual(data['students'],[])
+        ident=self.create(self.activity(participants=[],surveys=[]))
+        record=data['pendingParticipants'][0]['id']
+        result=self.client.post(f'/api/migrate/participants/pending/{record}/resolve',headers=self.headers,json={'activityId':ident})
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(self.snapshot()['pendingParticipants'],[])
+        self.assertEqual(self.snapshot()['students'][0]['nim'],'000000000004')
+
+    def test_viewer_and_survey_verifier_cannot_import_participants(self):
+        ident=self.create(self.activity(participants=[],surveys=[]))
+        for username,role in [('participants-viewer','viewer'),('participants-verifier','verifier')]:
+            _,headers=self.new_user(username,role)
+            result=self.client.post('/api/migrate/participants',headers=headers,json={'items':[{'activityId':ident,'student':{'nama':'Uji'}}]})
+            self.assertEqual(result.status_code,403,result.text)
 
 
 if __name__ == '__main__':

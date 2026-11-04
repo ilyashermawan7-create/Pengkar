@@ -47,7 +47,40 @@ peserta yang belum diketahui juga tetap kosong; data tersebut tidak diubah
 menjadi nama contoh atau jumlah peserta nol. Kegiatan belum lengkap dapat
 dilengkapi melalui Edit.
 
-## 2. Impor hasil survei kepuasan
+## 2. Impor peserta kegiatan
+
+Bagian **Import Peserta Kegiatan** tersedia untuk Super Admin, Operator KKA,
+atau operator program terkait. Impor ini menghubungkan peserta ke kegiatan,
+berbeda dengan impor Database Master Mahasiswa yang berdiri sendiri.
+
+1. Klik **Template Migrasi Peserta Kegiatan**.
+2. Isi ID/Nama Kegiatan, Tanggal Kegiatan bila diperlukan untuk membedakan
+   nama yang sama, serta NIM, Nama Mahasiswa, Program Studi, Fakultas, Kampus.
+3. Untuk daftar satu kegiatan yang tidak memiliki kolom kegiatan, pilih
+   **Kegiatan tujuan peserta**. Untuk beberapa kegiatan sekaligus, biarkan
+   pencocokan dari file dan isi metadata kegiatan pada setiap baris.
+4. Pilih **File migrasi peserta kegiatan**, periksa pratinjau, lalu klik
+   **Migrasikan … Peserta Kegiatan**.
+
+Daftar lama tidak dihapus. NIM yang sama pada kegiatan yang sama dilewati,
+dan impor berulang tidak menggandakan kehadiran. Kolom kosong tidak
+menghapus nama/prodi/fakultas/kampus yang sebelumnya sudah diketahui.
+Jumlah peserta kegiatan diperbarui minimal sebesar daftar peserta tersimpan;
+jika angka rekap sebelumnya lebih besar, angka itu tidak diturunkan hanya
+karena daftar nama yang diimpor belum lengkap.
+
+Peserta tanpa NIM tetap disimpan sebagai data belum teridentifikasi dengan
+identitas baris sumber, bukan NIM buatan. Rekap dan PDF menampilkan semua
+data tersebut, sedangkan hitungan NIM unik hanya memakai NIM yang terisi.
+NIM yang kemudian dilengkapi melalui ekspor/impor Master (pertahankan ID
+Master) juga dihubungkan kembali ke riwayat kegiatan terkait.
+
+Baris yang belum cocok dengan kegiatan disimpan dalam **Peserta Perlu
+Dicocokkan**. Pilih tujuan dan klik **Hubungkan Peserta** kemudian. Baris
+yang seluruh kolom mahasiswanya kosong dilewati, tanpa membuat peserta
+buatan. Salah ketik NIM atau pelanggaran hak akses tetap harus diperbaiki.
+
+## 3. Impor hasil survei kepuasan
 
 1. Unduh **Template Survei Kepuasan 20 Pertanyaan**.
 2. Isi Nama Kegiatan sama dengan daftar kegiatan. ID Kegiatan bersifat
@@ -129,6 +162,12 @@ susunan/isi file anonim mengubah identitas sumber; ekspor dari aplikasi
 mempertahankan kolom ID Sumber untuk impor ulang yang konsisten.
 
 ## Memeriksa hasil
+
+Tabel **Daftar Kegiatan Terpublikasi** menyediakan **Tampilkan kegiatan**
+dengan pilihan 10, 50, dan Semua (All), serta tombol Sebelumnya/Berikutnya.
+Pencarian atau perubahan filter mengembalikan tampilan ke halaman pertama.
+Pagination hanya membatasi baris di layar; Excel dan PDF tetap mencakup
+seluruh hasil filter, bukan hanya halaman yang sedang terlihat.
 
 Atur filter tahun/triwulan sesuai tahun data lama, bukan hanya tahun berjalan.
 Periksa tabel kegiatan, jumlah respons, nama kegiatan, dan ringkasan pertanyaan.

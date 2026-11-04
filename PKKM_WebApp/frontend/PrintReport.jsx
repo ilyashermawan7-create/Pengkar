@@ -13,8 +13,9 @@ export default function PrintReport({activities,students,surveys,filters,prepare
   const names=new Map(activities.map(a=>[a.id,a.namaKegiatan]));
   const grouped=new Map();
   for(const student of students){
-    if(!grouped.has(student.nim))grouped.set(student.nim,{...student,kegiatan:new Map()});
-    grouped.get(student.nim).kegiatan.set(student.activityId,names.get(student.activityId)||'Kegiatan');
+    const identity=student.nim||student.directoryId;
+    if(!grouped.has(identity))grouped.set(identity,{...student,kegiatan:new Map()});
+    grouped.get(identity).kegiatan.set(student.activityId,names.get(student.activityId)||'Kegiatan');
   }
   const people=[...grouped.values()].sort((a,b)=>a.nama.localeCompare(b.nama,'id'));
   const generatedAt=new Intl.DateTimeFormat('id-ID',{dateStyle:'long',timeStyle:'short',timeZone:'Asia/Jakarta'}).format(new Date());
@@ -22,7 +23,7 @@ export default function PrintReport({activities,students,surveys,filters,prepare
     <div className="report-heading"><h1>Laporan Kegiatan dan Rekap Mahasiswa PKKM</h1><p>Telkom University · Pengembangan Karakter dan Asrama</p></div>
     <p>Filter: {filters.year} · {filters.quarter} · {filters.category}{filters.search?` · Pencarian: ${filters.search}`:''}</p>
     <p>Dicetak: {generatedAt} WIB · Oleh: {preparedBy}</p>
-    <p className="report-summary">Ringkasan: {activities.length} kegiatan · {activities.reduce((sum,a)=>sum+a.jumlahPeserta,0)} kehadiran · {people.length} mahasiswa unik teridentifikasi · {surveys.length} respons survei.</p>
+    <p className="report-summary">Ringkasan: {activities.length} kegiatan · {activities.reduce((sum,a)=>sum+a.jumlahPeserta,0)} kehadiran · {people.filter(student=>student.nim).length} mahasiswa unik teridentifikasi · {surveys.length} respons survei.</p>
     <h2>Data Kegiatan</h2>
     <Table columns={['No.','Tanggal / TW','Nama Kegiatan','Program / Kategori','Peserta','Skor Survei','Narasumber','Eviden / Laporan']} empty="Tidak ada kegiatan sesuai filter yang dipilih." rows={activities.map((a,index)=>[
       index+1,`${a.tanggal||'—'} / ${a.triwulan||'—'} (Tahun ${a.tahun||'—'})`,a.namaKegiatan,`${a.program} / ${a.kategori}`,a.jumlahPeserta,

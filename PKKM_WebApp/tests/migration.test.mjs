@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
 import schema from '../survey_schema.json' with {type:'json'};
-import {readActivities,readSurveyResponses,matchSurveyActivities,parseScore,readDirectory} from '../frontend/migration.mjs';
+import {readActivities,readSurveyResponses,matchSurveyActivities,parseScore,readDirectory,readActivityParticipants} from '../frontend/migration.mjs';
 
 function file(rows){
   const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet(rows),'Data');
@@ -137,4 +137,25 @@ test('empty survey dates and unmatched targets can be preserved as pending',asyn
   const pending=matchSurveyActivities(parsed.items,[],'',true);
   assert.equal(pending[0].activityId,null);
   assert.ok(pending[0].unresolved);
+});
+
+test('participant migration reads activity mapping, preserves NIM zeroes and allows empty identity',async()=>{
+  const rows=await readActivityParticipants(file([
+    ['Nama Kegiatan','Tanggal Kegiatan','NIM','Nama Mahasiswa','Program Studi'],
+    ['Kegiatan Uji','2026-11-04','000000000001','Peserta Pertama','Informatika'],
+    ['Kegiatan Uji','','','Peserta Tanpa NIM',''],
+  ]));
+  assert.equal(rows[0].student.nim,'000000000001');
+  assert.equal(rows[1].student.nim,'');
+  assert.equal(rows[1].student.nama,'Peserta Tanpa NIM');
+  assert.notEqual(rows[0].importKey,rows[1].importKey);
+  const matched=matchSurveyActivities(rows,[{id:1,namaKegiatan:'Kegiatan Uji',tanggal:'2026-11-04'}],'',true);
+  assert.ok(matched.every(item=>item.activityId===1));
+});
+
+test('participant files without activity metadata can use a selected destination',async()=>{
+  const rows=await readActivityParticipants(file([['NIM','Nama'],['000000000001','Peserta Uji']]));
+  const activities=[{id:4,namaKegiatan:'Kegiatan Pilihan',tanggal:'2026-11-04'}];
+  assert.equal(matchSurveyActivities(rows,activities,'4',true)[0].activityId,4);
+  assert.equal(matchSurveyActivities(rows,activities,'',true)[0].activityId,null);
 });

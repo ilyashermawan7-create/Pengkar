@@ -15,6 +15,9 @@ dan mencocokkan survei dengan nama kegiatan yang benar.
 Master mahasiswa juga dapat diimpor tanpa kegiatan. Kolom kosong tetap
 diproses, Tahun tersedia pada template kegiatan, dan survei yang belum
 memiliki kegiatan tujuan disimpan untuk dicocokkan belakangan.
+Impor peserta kegiatan tersedia sebagai bagian tersendiri pada panel migrasi,
+dengan template dan pencocokan kegiatan. Daftar kegiatan mendukung tampilan
+10, 50, atau Semua tanpa membatasi data yang diekspor.
 
 ## Menjalankan (Windows PowerShell)
 

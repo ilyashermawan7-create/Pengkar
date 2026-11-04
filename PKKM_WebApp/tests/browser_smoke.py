@@ -396,6 +396,86 @@ def main():
                 snapshot=page.request.get(url+'/api/dashboard',headers=auth).json()
                 assert any(s['nama']=='Tanpa NIM UI' and s['nim']=='' for s in snapshot['masterStudents'])
                 print('PASS: partial/undated survey stored pending then linked without fabricated scores; PDF and reload succeed')
+                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                migration=page.get_by_role('region',name='Migrasi data kegiatan dan survei',exact=True)
+                with page.expect_download() as participant_migration_template:
+                    migration.get_by_role('button',name='Template Migrasi Peserta Kegiatan',exact=True).click()
+                assert participant_migration_template.value.suggested_filename=='Template_Migrasi_Peserta_Kegiatan.xlsx'
+                participant_file={'name':'peserta-migrasi.csv','mimeType':'text/csv','buffer':b'Nama Kegiatan,NIM,Nama Mahasiswa,Fakultas\nWebinar Migrasi A,000000000401,Peserta Migrasi Satu,FIF\nWebinar Migrasi A,000000000401,Peserta Migrasi Satu,FIF\nWebinar Migrasi B,,Peserta Tanpa NIM Migrasi,FIF\nWebinar Migrasi B,000000000402,,\n'}
+                migration.get_by_label('File migrasi peserta kegiatan',exact=True).set_input_files(participant_file)
+                expect(migration).to_contain_text('4 baris peserta kegiatan siap diperiksa')
+                migration.get_by_role('button',name='Migrasikan 4 Peserta Kegiatan',exact=True).click()
+                expect(migration).to_contain_text('3 peserta ditambahkan ke 2 kegiatan, 1 duplikat/baris kosong dilewati')
+                migration.get_by_label('File migrasi peserta kegiatan',exact=True).set_input_files(participant_file)
+                expect(migration).to_contain_text('4 baris peserta kegiatan siap diperiksa')
+                migration.get_by_role('button',name='Migrasikan 4 Peserta Kegiatan',exact=True).click()
+                expect(migration).to_contain_text('0 peserta ditambahkan ke 2 kegiatan, 4 duplikat/baris kosong dilewati')
+                snapshot=page.request.get(url+'/api/dashboard',headers=auth).json()
+                assert any(row['nama']=='Peserta Tanpa NIM Migrasi' and row['nim']=='' for row in snapshot['students'])
+                assert any(row['nim']=='123456789012' for row in snapshot['students'])
+                assert next(row for row in snapshot['activities'] if row['namaKegiatan']=='Webinar Migrasi A')['jumlahPeserta']==3
+                assert next(row for row in snapshot['activities'] if row['namaKegiatan']=='Webinar Migrasi B')['jumlahPeserta']==5
+                print('PASS: participant migration maps multiple activities, preserves missing identity and skips repeated NIM')
+                target_a=next(row['id'] for row in snapshot['activities'] if row['namaKegiatan']=='Webinar Migrasi A')
+                migration.get_by_label('Kegiatan tujuan migrasi peserta',exact=True).select_option(str(target_a))
+                migration.get_by_label('File migrasi peserta kegiatan',exact=True).set_input_files({'name':'pilih-kegiatan.csv','mimeType':'text/csv','buffer':b'NIM,Nama Mahasiswa\n000000000403,Peserta Pilihan\n'})
+                expect(migration).to_contain_text('1 baris peserta kegiatan siap diperiksa')
+                migration.get_by_role('button',name='Migrasikan 1 Peserta Kegiatan',exact=True).click()
+                expect(migration).to_contain_text('1 peserta ditambahkan ke 1 kegiatan')
+                migration.get_by_label('Kegiatan tujuan migrasi peserta',exact=True).select_option('')
+                migration.get_by_label('File migrasi peserta kegiatan',exact=True).set_input_files({'name':'belum-cocok.csv','mimeType':'text/csv','buffer':b'NIM,Nama Mahasiswa\n000000000405,Peserta Belum Cocok\n'})
+                expect(migration).to_contain_text('1 baris peserta kegiatan siap diperiksa')
+                migration.get_by_role('button',name='Migrasikan 1 Peserta Kegiatan',exact=True).click()
+                expect(migration).to_contain_text('1 peserta disimpan untuk dicocokkan')
+                pending_participants=page.get_by_label('Peserta perlu dicocokkan',exact=True)
+                pending_participants.locator('select').select_option(str(target_a))
+                pending_participants.get_by_role('button',name='Hubungkan Peserta',exact=True).click()
+                expect(migration).to_contain_text('Peserta berhasil dihubungkan ke kegiatan.')
+                snapshot=page.request.get(url+'/api/dashboard',headers=auth).json()
+                assert not snapshot['pendingParticipants']
+                assert any(row['nim']=='000000000405' and row['activityId']==target_a for row in snapshot['students'])
+                print('PASS: selected destination and pending participant resolution preserve existing attendance')
+                before_count=len(snapshot['activities'])
+                batch=[{'namaKegiatan':'Kegiatan Halaman'+str(i).zfill(3),'tanggal':'2026-11-04','program':'Pengembangan Karakter','kategori':'Uji Halaman'} for i in range(55)]
+                result=page.request.post(url+'/api/migrate/activities',headers=auth,data={'items':batch})
+                assert result.status==200,result.text()
+                page.reload()
+                expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
+                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                listing=page.get_by_role('region',name='Daftar kegiatan tersimpan',exact=True)
+                total_count=before_count+55
+                expect(listing.locator('tbody tr')).to_have_count(10)
+                listing.get_by_role('button',name='Berikutnya',exact=True).click()
+                expect(listing).to_contain_text('Halaman 2 dari ')
+                expect(listing.locator('tbody tr')).to_have_count(10)
+                listing.get_by_role('button',name='Sebelumnya',exact=True).click()
+                expect(listing).to_contain_text('Halaman 1 dari ')
+                listing.get_by_label('Jumlah kegiatan per halaman',exact=True).select_option('50')
+                expect(listing.locator('tbody tr')).to_have_count(50)
+                listing.get_by_role('button',name='Berikutnya',exact=True).click()
+                expect(listing.locator('tbody tr')).to_have_count(total_count-50)
+                listing.get_by_label('Jumlah kegiatan per halaman',exact=True).select_option('all')
+                expect(listing.locator('tbody tr')).to_have_count(total_count)
+                expect(listing.get_by_role('button',name='Berikutnya',exact=True)).to_be_disabled()
+                listing.get_by_label('Jumlah kegiatan per halaman',exact=True).select_option('10')
+                with page.expect_download() as all_activity_export:
+                    listing.get_by_role('button',name='Ekspor Excel',exact=True).click()
+                check_export='''import * as XLSX from 'xlsx'; import fs from 'node:fs';
+                    const book=XLSX.read(fs.readFileSync(process.argv[1]),{type:'buffer'});
+                    const rows=XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+                    if(rows.length!==Number(process.argv[2]))process.exit(1);'''
+                subprocess.run(['node','--input-type=module','-e',check_export,all_activity_export.value.path(),str(total_count)],cwd=ROOT,check=True)
+                with page.expect_download() as all_activity_pdf:
+                    listing.get_by_role('button',name='Unduh PDF',exact=True).click()
+                text=' '.join(p.extract_text() for p in PdfReader(all_activity_pdf.value.path()).pages)
+                assert 'Kegiatan Halaman000' in text and 'Kegiatan Halaman054' in text
+                page.get_by_label('Cari laporan',exact=True).fill('Kegiatan Halaman054')
+                expect(listing.locator('tbody tr')).to_have_count(1)
+                expect(listing.get_by_role('button',name='Berikutnya',exact=True)).to_be_disabled()
+                page.get_by_role('button',name='Reset Filter',exact=True).click()
+                expect(listing.locator('tbody tr')).to_have_count(10)
+                page.screenshot(path=str(ARTIFACTS/'pagination-kegiatan.png'),full_page=True)
+                print('PASS: activity pagination 10/50/all, next/previous, filter reset, and exports contain every filtered record')
                 assert not errors, errors
                 print('PASS: mobile navigation; no browser JavaScript errors')
                 browser.close()

@@ -30,6 +30,9 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const [students, setStudents] = useState([]);
       const [masterStudents,setMasterStudents]=useState([]);
       const [pendingSurveys,setPendingSurveys]=useState([]);
+      const [pendingParticipants,setPendingParticipants]=useState([]);
+      const [activityPageSize,setActivityPageSize]=useState('10');
+      const [activityPage,setActivityPage]=useState(1);
       const [activities, setActivities] = useState([]);
       const [surveys, setSurveys] = useState([]);
       const [adminList, setAdminList] = useState([]);
@@ -57,7 +60,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       };
       const load = async (authToken=token) => {
         const data = await api('/dashboard', {}, authToken);
-        setActivities(data.activities);setStudents(data.students);setSurveys(data.surveys);setMasterStudents(data.masterStudents||[]);setPendingSurveys(data.pendingSurveys||[]);
+        setActivities(data.activities);setStudents(data.students);setSurveys(data.surveys);setMasterStudents(data.masterStudents||[]);setPendingSurveys(data.pendingSurveys||[]);setPendingParticipants(data.pendingParticipants||[]);
         setAdminList(data.adminList);setProfileData(data.profile);return data;
       };
       const run = async (operation) => {
@@ -108,6 +111,12 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
           && (filterTw==='Semua Triwulan'||act.triwulan===filterTw)
           && (filterCategory==='Semua Kategori'||act.kategori===filterCategory);
       });
+      useEffect(()=>{setActivityPage(1);},[searchNim,filterYear,filterTw,filterCategory,activities.length]);
+      const activityLimit=activityPageSize==='all'?Math.max(1,filteredActivities.length):Number(activityPageSize);
+      const activityPages=Math.max(1,Math.ceil(filteredActivities.length/activityLimit));
+      const currentActivityPage=Math.min(activityPage,activityPages);
+      const activityStart=(currentActivityPage-1)*activityLimit;
+      const pagedActivities=filteredActivities.slice(activityStart,activityStart+activityLimit);
       const visibleIds = new Set(filteredActivities.map(a=>a.id));
       const filteredStudents=students.filter(s=>visibleIds.has(s.activityId));
       const filteredSurveys=surveys.filter(s=>visibleIds.has(s.activityId));
@@ -121,7 +130,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         return {label,val:value===null?'—':(value*20).toFixed(1)+'%',skor:value===null?'—':value.toFixed(2),status:value===null?'Belum ada respons':value>=4.5?'Sangat Memuaskan':value>=3.5?'Memuaskan':'Perlu Perbaikan'};
       });
       const satisfaction=mean(measuredSurveys.map(s=>s.skorTotal));
-      const facultyCounts=Object.entries([...new Map(filteredStudents.map(s=>[s.nim,s])).values()].reduce((acc,s)=>{const key=s.fakultas||'Belum diisi';acc[key]=(acc[key]||0)+1;return acc;},{})).sort((a,b)=>b[1]-a[1]);
+      const facultyCounts=Object.entries([...new Map(filteredStudents.map(s=>[s.nim||s.directoryId,s])).values()].reduce((acc,s)=>{const key=s.fakultas||'Belum diisi';acc[key]=(acc[key]||0)+1;return acc;},{})).sort((a,b)=>b[1]-a[1]);
 
       // Ref Chart Dashboard
       const pieChartRef = useRef(null);
@@ -148,7 +157,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       };
       const handleLogout = async () => {
         try {await api('/logout',{method:'POST'});} catch {}
-        sessionStorage.removeItem('pkkm_token');setToken('');setIsLoggedIn(false);setActivities([]);setStudents([]);setMasterStudents([]);setPendingSurveys([]);setSurveys([]);setAdminList([]);setNotice('');resetActivity();
+        sessionStorage.removeItem('pkkm_token');setToken('');setIsLoggedIn(false);setActivities([]);setStudents([]);setMasterStudents([]);setPendingSurveys([]);setPendingParticipants([]);setSurveys([]);setAdminList([]);setNotice('');resetActivity();
       };
 
       // Lookup Mahasiswa
@@ -203,7 +212,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const resetActivity = () => {setEditingId(null);setActivityForm({...freshForm(),...(profileData.role==='asrama'?{program:'Asrama',kategori:'Pengkar Asrama',urusan:'Asrama'}:{})});setParticipantRows([]);setSurveyRows([]);setImportedParticipantFile(null);setParticipantImportError('');};
       const editActivity = (act) => {
         setEditingId(act.id);setActivityForm({...freshForm(),...act,tanggal:act.tanggal||'',jumlahPeserta:act.jumlahPeserta??'',takPanitia:act.takPanitia??'',takPeserta:act.takPeserta??'',targetSurveyKepuasan:act.targetSurveyKepuasan??''});
-        setParticipantRows(students.filter(s=>s.activityId===act.id));setSurveyRows(surveys.filter(s=>s.activityId===act.id));
+        setParticipantRows(students.filter(s=>s.activityId===act.id&&s.nim));setSurveyRows(surveys.filter(s=>s.activityId===act.id));
         setImportedParticipantFile(null);setParticipantImportError('');setActiveNav('laporan');window.scrollTo(0,0);
       };
       const handleSaveActivity = async (e) => {
@@ -391,7 +400,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       // =========================================================================
       const totalPeserta=filteredActivities.reduce((sum,a)=>sum+a.jumlahPeserta,0);
       const totalKegiatan=filteredActivities.length;
-      const totalPesertaUnik=new Set(filteredStudents.map(s=>s.nim)).size;
+      const totalPesertaUnik=new Set(filteredStudents.map(s=>s.nim).filter(Boolean)).size;
       const rasioMahasiswa=((totalPesertaUnik/45000)*100).toFixed(2);
       const countCategory=pattern=>filteredActivities.filter(a=>pattern.test(`${a.kategori} ${a.namaKegiatan} ${a.urusan}`)).length;
       const totalKegiatanKarakter=countCategory(/karakter|wawasan|bela negara/i);
@@ -699,6 +708,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                       </div>
                     ))}
                   </div>
+
                 </div>
 
               <SurveySummary surveys={filteredSurveys} activities={filteredActivities} />
@@ -712,7 +722,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {activeNav === 'laporan' && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
 
-                <MigrationPanel activities={activities} role={profileData.role} api={api} reload={load} pendingSurveys={pendingSurveys} />
+                <MigrationPanel activities={activities} role={profileData.role} api={api} reload={load} pendingSurveys={pendingSurveys} pendingParticipants={pendingParticipants} />
                 {['admin','operator'].includes(profileData.role)&&<StudentRecap mode="master" rows={masterStudents} activities={activities} />}
                 <div className="bg-white border rounded-2xl p-4 space-y-3 text-xs no-print"><h3 className="font-bold">Filter Laporan</h3><div className="flex flex-wrap gap-3"><input aria-label="Cari laporan" placeholder="NIM / nama kegiatan" value={searchNim} onChange={e=>setSearchNim(e.target.value)} className="border rounded-lg p-2"/><select aria-label="Tahun laporan" value={filterYear} onChange={e=>setFilterYear(e.target.value)} className="border rounded-lg p-2"><option>Semua Tahun</option>{years.map(y=><option key={y}>{y}</option>)}</select><select aria-label="Triwulan laporan" value={filterTw} onChange={e=>setFilterTw(e.target.value)} className="border rounded-lg p-2"><option>Semua Triwulan</option>{['TW1','TW2','TW3','TW4'].map(q=><option key={q}>{q}</option>)}</select><select aria-label="Kategori laporan" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)} className="border rounded-lg p-2"><option>Semua Kategori</option>{categories.map(c=><option key={c}>{c}</option>)}</select><button onClick={()=>{setSearchNim('');setFilterYear('Semua Tahun');setFilterTw('Semua Triwulan');setFilterCategory('Semua Kategori');}} className="border rounded-lg p-2">Reset Filter</button></div></div>
                 {/* FORM INPUT KEGIATAN 16 FIELD MASTER PERSIS GAMBAR LAMPIRAN */}
@@ -1056,6 +1066,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                   <h3 className="font-bold text-sm text-slate-900">Daftar Kegiatan Terpublikasi ({filteredActivities.length})</h3>
                   <div className="flex gap-2"><button onClick={exportActivities} className="border rounded-lg px-3 py-2 text-xs">Ekspor Excel</button><button disabled={busy} onClick={()=>run(()=>downloadReportPdf({activities:filteredActivities,students:filteredStudents,surveys:filteredSurveys,filters:{year:filterYear,quarter:filterTw,category:filterCategory,search:searchNim},preparedBy:profileData.nama}))} className="border rounded-lg px-3 py-2 text-xs">Unduh PDF</button></div>
                   <p className="text-xs text-slate-500">PDF diunduh langsung dan memuat seluruh data sesuai filter laporan, tanpa formulir aplikasi.</p>
+                  <label className="text-xs block">Tampilkan kegiatan<select aria-label="Jumlah kegiatan per halaman" value={activityPageSize} onChange={event=>{setActivityPageSize(event.target.value);setActivityPage(1);}} className="border rounded-lg p-2 ml-2"><option value="10">10</option><option value="50">50</option><option value="all">Semua (All)</option></select></label>
                   <div className="overflow-x-auto custom-scrollbar">
                     <table className="w-full text-xs text-left">
                       <thead className="bg-[#991b1b] text-white uppercase text-[10px]">
@@ -1072,7 +1083,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {filteredActivities.length===0 && <tr><td colSpan={9} className="p-6 text-center text-slate-400">Belum ada kegiatan yang sesuai filter.</td></tr>}
-                        {filteredActivities.map((act) => (
+                        {pagedActivities.map((act) => (
                           <tr key={act.id} className="hover:bg-slate-50">
                             <td className="py-2.5 px-3 whitespace-nowrap">{act.tanggal}</td>
                             <td className="py-2.5 px-3">{act.tahun}</td>
@@ -1088,6 +1099,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                       </tbody>
                     </table>
                   </div>
+                  <div className="flex flex-wrap justify-between items-center gap-3 text-xs text-slate-600"><p>Menampilkan {filteredActivities.length?activityStart+1:0}–{Math.min(activityStart+activityLimit,filteredActivities.length)} dari {filteredActivities.length} kegiatan. Ekspor tetap memuat semua hasil filter.</p><nav aria-label="Halaman daftar kegiatan" className="flex gap-3 items-center"><button disabled={currentActivityPage===1} onClick={()=>setActivityPage(currentActivityPage-1)} className="border rounded-lg p-2">Sebelumnya</button><span>Halaman {currentActivityPage} dari {activityPages}</span><button disabled={currentActivityPage===activityPages} onClick={()=>setActivityPage(currentActivityPage+1)} className="border rounded-lg p-2">Berikutnya</button></nav></div>
                 </div>
 
               <SurveySummary surveys={filteredSurveys} activities={filteredActivities} />
