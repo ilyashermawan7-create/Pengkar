@@ -104,8 +104,9 @@ dan menyimpan survei tanpa kegiatan tujuan untuk dicocokkan belakangan.
 Tanggal dan triwulan berasal dari tanggal kegiatan. Grafik, statistik,
 peserta unik berdasarkan NIM, dan ekspor mengikuti filter yang sama.
 Total peserta adalah akumulasi jumlah kehadiran; peserta unik hanya dihitung
-dari daftar NIM yang benar-benar diimpor. Rasio membandingkan peserta unik
-dengan target 45.000 dari referensi. Analisis dimensi survei dihitung dari
+dari daftar NIM yang benar-benar diimpor. Rasio memakai **Total Peserta
+÷ 45.000 × 100%**, bukan peserta unik, dan tidak dibatasi maksimal 100%.
+Analisis dimensi survei dihitung dari
 respons individual, sehingga evaluasi agregat versi lama tetap ada pada API
 lama dan skor tabel kegiatan, tetapi tidak dianggap sebagai respons individual.
 
@@ -113,6 +114,20 @@ Login pada HTML referensi dan OTP yang ditampilkan di layar adalah simulasi;
 implementasi ini menggunakan pemeriksaan password server yang sebenarnya.
 Google/SSO tetap dinonaktifkan seperti referensi; OTP belum diaktifkan.
 Tidak ada sinkronisasi Looker Studio atau impor otomatis localStorage lama.
+
+## Rekap kegiatan dashboard
+
+`frontend/dashboardMetrics.mjs` menghitung seluruh metrik dari dataset hasil
+filter yang sama dengan tabel dan ekspor. Total Kegiatan adalah jumlah rekaman
+kegiatan sesuai filter; kartu juga menunjukkan pembanding seluruh kegiatan.
+Pagination tidak membatasi perhitungan.
+
+Setiap kegiatan masuk tepat satu kelompok rekap dengan prioritas PPKPT/PPKS/
+kekerasan, kemudian Asrama/Resident/SR, lalu Karakter/Pengkar/Wawasan/Konseling/
+Kesehatan Mental atau program Pengembangan Karakter. Sisanya ditampilkan
+sebagai Lainnya. Ini mencegah acara Pengkar Asrama dihitung pada dua kartu.
+Subtotal kelompok selalu berjumlah Total Kegiatan. Kategori asli tetap ada;
+ekspor Excel menambahkan kolom `kelompokRekap` untuk pemeriksaan.
 
 ## Cetak dan PDF
 

@@ -10,6 +10,7 @@ import MigrationPanel from './MigrationPanel.jsx';
 import SurveySummary from './SurveySummary.jsx';
 import surveySchema from '../survey_schema.json';
 import {average} from './statistics.mjs';
+import {dashboardMetrics,activityGroup,activityGroupLabels} from './dashboardMetrics.mjs';
 import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './migration.mjs';
 
     const { useState, useEffect, useRef } = React;
@@ -248,7 +249,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       };
       const exportActivities = () => {
         const safe=value=>typeof value==='string'&&/^[=+@-]/.test(value)?"'"+value:value;
-        const rows=filteredActivities.map(a=>Object.fromEntries(Object.entries(a).map(([k,v])=>[k,safe(v)])));
+        const rows=filteredActivities.map(a=>Object.fromEntries(Object.entries({...a,kelompokRekap:activityGroupLabels[activityGroup(a)]}).map(([k,v])=>[k,safe(v)])));
         const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Kegiatan');XLSX.writeFile(wb,'Laporan_PKKM.xlsx');
       };
 
@@ -398,14 +399,14 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       // =========================================================================
       // LOGIKA PERHITUNGAN METRIK DASHBOARD OTOMATIS & DINAMIS
       // =========================================================================
-      const totalPeserta=filteredActivities.reduce((sum,a)=>sum+a.jumlahPeserta,0);
-      const totalKegiatan=filteredActivities.length;
+      const metrics=dashboardMetrics(filteredActivities);
+      const totalPeserta=metrics.participants;
+      const totalKegiatan=metrics.total;
       const totalPesertaUnik=new Set(filteredStudents.map(s=>s.nim).filter(Boolean)).size;
-      const rasioMahasiswa=((totalPesertaUnik/45000)*100).toFixed(2);
-      const countCategory=pattern=>filteredActivities.filter(a=>pattern.test(`${a.kategori} ${a.namaKegiatan} ${a.urusan}`)).length;
-      const totalKegiatanKarakter=countCategory(/karakter|wawasan|bela negara/i);
-      const totalKegiatanPPKPT=countCategory(/ppkpt|ppks|kekerasan/i);
-      const totalKegiatanAsrama=countCategory(/asrama|resident/i);
+      const rasioMahasiswa=metrics.ratio.toFixed(2);
+      const totalKegiatanKarakter=metrics.groups.karakter;
+      const totalKegiatanPPKPT=metrics.groups.ppkpt;
+      const totalKegiatanAsrama=metrics.groups.asrama;
 
       // =========================================================================
       // 2. TAMPILAN SETELAH LOGIN (PANEL DENGAN 4 MENU UTAMA)
@@ -599,12 +600,12 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                         <span className="text-3xl md:text-4xl font-black text-slate-900 mt-1 block">
                           {totalKegiatan.toLocaleString('id-ID')}
                         </span>
-                        <span className="text-[10px] text-slate-400 mt-0.5 block">Kegiatan terdaftar di sistem</span>
+                        <span className="text-[10px] text-slate-400 mt-0.5 block">{totalKegiatan} dari {activities.length} kegiatan · sesuai filter aktif</span>
                       </div>
                     </div>
 
                     {/* BARIS SUB-METRIK PERSIS FOTO */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 text-center">
+                    <div className={`grid grid-cols-2 sm:grid-cols-3 ${metrics.groups.lainnya?'md:grid-cols-6':'md:grid-cols-5'} gap-3 text-center`}>
                       <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
                         <span className="text-[11px] font-medium text-slate-400 block">Peserta unik teridentifikasi (NIM)</span>
                         <span className="text-xl font-bold text-slate-800 mt-0.5 block">
@@ -616,6 +617,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                         <span className="text-xl font-bold text-slate-800 mt-0.5 block">
                           {rasioMahasiswa}%
                         </span>
+                        <span className="text-[10px] text-slate-400 block mt-1">Total Peserta ÷ 45.000 × 100%</span>
                       </div>
                       <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
                         <span className="text-[11px] font-medium text-slate-400 block">Kegiatan Karakter</span>
@@ -635,7 +637,9 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                           {totalKegiatanAsrama}
                         </span>
                       </div>
+                      {metrics.groups.lainnya>0&&<div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm"><span className="text-[11px] font-medium text-slate-400 block">Kegiatan Lainnya</span><span className="text-xl font-bold text-slate-800 mt-0.5 block">{metrics.groups.lainnya}</span></div>}
                     </div>
+                    <div aria-label="Rincian perhitungan kegiatan" className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 space-y-1"><p>Rekap: {totalKegiatanKarakter} Karakter + {totalKegiatanPPKPT} PPKPT + {totalKegiatanAsrama} Asrama{metrics.groups.lainnya?` + ${metrics.groups.lainnya} Lainnya`:''} = <b>{totalKegiatan} kegiatan</b>.</p><p>Setiap kegiatan dihitung satu kali, dengan prioritas PPKPT → Asrama → Karakter. Semua angka mengikuti filter aktif; rincian kelompok tersedia pada ekspor Excel.</p>{metrics.unknownParticipants>0&&<p>{metrics.unknownParticipants} kegiatan belum memiliki jumlah peserta; nilai kosong tidak dianggap sebagai data peserta terisi.</p>}</div>
 
                     {/* DIAGRAM FAKULTAS & PIE KATEGORI (PERSIS GAMBAR) */}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4">

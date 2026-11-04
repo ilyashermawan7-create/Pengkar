@@ -21,6 +21,8 @@ dengan template dan pencocokan kegiatan. Daftar kegiatan mendukung tampilan
 Peserta tertunda dapat diproses melalui **Hubungkan Otomatis** untuk
 kecocokan unik, atau dihubungkan per kelompok nama kegiatan sekaligus.
 Pratinjau dan progres tersedia; nama ambigu atau tanggal konflik tidak ditebak.
+Rasio dashboard memakai Total Peserta ÷ 45.000 × 100%. Rekap kelompok kegiatan
+dihitung tanpa tumpang tindih dan mengikuti filter yang sama dengan daftar.
 
 ## Menjalankan (Windows PowerShell)
 
