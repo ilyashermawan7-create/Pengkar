@@ -32,6 +32,12 @@ lama, akun dan password yang sudah tersimpan tetap dipakai.
   daftar lama. Data tanpa NIM memakai `activity_unidentified_participants`
   dengan referensi master; pencocokan yang tertunda memakai
   `pending_participants`. Semua diperiksa menurut hak akses program.
+- `participant_matching.py` menyediakan pencocokan nama kanonis yang
+  konservatif, bukan fuzzy matching. Endpoint
+  `POST /api/migrate/participants/pending/auto-connect` mendukung dry-run,
+  batch maksimum 1.000, dan pemetaan kelompok eksplisit. UI ada pada
+  `frontend/PendingParticipantMatcher.jsx`. Tanggal konflik/nama ambigu
+  tidak dihubungkan otomatis; operasi dibatasi akun dan program yang diizinkan.
 - Endpoint lama yang masih dipertahankan: `server.py`.
 
 Setelah mengedit frontend, bangun aset dan commit hasilnya:

@@ -9,6 +9,7 @@ from typing import Literal
 
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from participant_matching import activity_index,match as match_pending_activity,group_key as pending_group_key
 
 SURVEY_SCHEMA = json.loads((Path(__file__).parent/'survey_schema.json').read_text(encoding='utf-8'))
 
@@ -222,6 +223,13 @@ class ParticipantMigrationRow(Input):
 
 class ParticipantMigration(Input):
     items: list[ParticipantMigrationRow] = Field(min_length=1,max_length=10000)
+
+
+class AutoConnectParticipants(Input):
+    dry_run: bool = True
+    limit: int = Field(default=1000,ge=1,le=1000)
+    groupKey: str = Field(default='',max_length=64)
+    activityId: int | None = Field(default=None,gt=0)
 
 
 def register(app, connect, auth, allow, audit, hash_password, check_password):
@@ -449,6 +457,57 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             result=apply_participants(c,data.items,user)
             audit(c,user,'migrate_participants','migration',None)
         return result
+
+    @app.post('/api/migrate/participants/pending/auto-connect')
+    def auto_connect_participants(data: AutoConnectParticipants,user=Depends(auth)):
+        allow(user)
+        with connect() as c:
+            if not data.dry_run:c.execute('BEGIN IMMEDIATE')
+            allowed=[dict(row) for row in c.execute('SELECT id,nama_kegiatan,tanggal,program FROM activities') if visible(user,row['program'])]
+            index=activity_index(allowed)
+            records=[]
+            groups={}
+            summary=dict(total=0,matched=0,ambiguous=0,unmatched=0,date_conflict=0,blank=0,invalid=0)
+            for row in c.execute('SELECT * FROM pending_participants WHERE user_id=? ORDER BY rowid',(user['id'],)):
+                try:item=ParticipantMigrationRow.model_validate_json(row['payload'])
+                except ValueError:
+                    summary['total']+=1;summary['invalid']+=1
+                    continue
+                target,status=match_pending_activity(item,index)
+                key=pending_group_key(row['record_key'],item)
+                summary['total']+=1;summary[status]+=1
+                if key not in groups:
+                    groups[key]={'key':key,'name':item.namaKegiatan,'date':item.tanggalKegiatan,
+                                 'count':0,'status':status,'targetId':target['id'] if target else None,
+                                 'targetName':target['nama_kegiatan'] if target else '', 'canGroup':bool(item.namaKegiatan),'examples':[]}
+                groups[key]['count']+=1
+                example=item.student.nama or item.student.nim
+                if example and len(groups[key]['examples'])<3:groups[key]['examples'].append(example)
+                records.append((row['record_key'],item,key,target))
+            if data.dry_run:
+                return {'summary':summary,'groups':sorted(groups.values(),key=lambda group:-group['count'])}
+            if bool(data.groupKey)!=bool(data.activityId):
+                raise HTTPException(422,'Pilih kelompok peserta dan kegiatan tujuan bersamaan')
+            forced=None
+            if data.activityId:
+                forced=next((activity for activity in allowed if activity['id']==data.activityId),None)
+                if not forced:raise HTTPException(403,'Kegiatan tujuan tidak dapat diakses')
+                if data.groupKey not in groups:raise HTTPException(409,'Kelompok sudah diproses atau berubah; periksa ulang daftar')
+            eligible=[record for record in records if record[2]==data.groupKey] if forced else [record for record in records if record[3]]
+            selected=eligible[:data.limit]
+            if not selected:return {'processed':0,'created':0,'skipped':0,'remainingMatched':summary['matched'],'remainingGroup':len(eligible),'remaining':summary['total']}
+            items=[]
+            for record_id,item,key,target in selected:
+                target=forced or target
+                item.activityId=target['id']
+                item.namaKegiatan=target['nama_kegiatan']
+                items.append(item)
+            result=apply_participants(c,items,user)
+            c.executemany('DELETE FROM pending_participants WHERE record_key=? AND user_id=?',[(record[0],user['id']) for record in selected])
+            audit(c,user,'bulk_connect_participants','activity',forced['id'] if forced else None)
+            matched_processed=sum(record[3] is not None for record in selected)
+            return {**result,'processed':len(selected),'remainingMatched':summary['matched']-matched_processed,
+                    'remainingGroup':len(eligible)-len(selected),'remaining':summary['total']-len(selected)}
 
     @app.post('/api/migrate/participants/pending/{record_key}/resolve')
     def resolve_pending_participants(record_key: str,data: ResolveSurvey,user=Depends(auth)):

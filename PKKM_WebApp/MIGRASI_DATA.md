@@ -80,6 +80,35 @@ Dicocokkan**. Pilih tujuan dan klik **Hubungkan Peserta** kemudian. Baris
 yang seluruh kolom mahasiswanya kosong dilewati, tanpa membuat peserta
 buatan. Salah ketik NIM atau pelanggaran hak akses tetap harus diperbaiki.
 
+### Hubungkan peserta tertunda secara otomatis
+
+Pada **Peserta Perlu Dicocokkan**, aplikasi memeriksa ulang peserta yang sudah
+tersimpan. Tidak perlu mengunggah ulang file.
+
+1. Klik **Periksa Kecocokan** untuk memperbarui pratinjau jumlah cocok unik,
+   nama ambigu, tanggal berbeda, dan nama yang belum ditemukan.
+2. Klik **Hubungkan Otomatis (… )**. Seluruh kecocokan unik diproses dalam
+   batch maksimal 1.000 peserta, dengan progres hingga selesai. Batas
+   10/50/Semua di layar tidak membatasi jumlah peserta yang diproses.
+3. Untuk sisanya, cari kelompok nama kegiatan. Pilih kegiatan tujuan sekali,
+   lalu klik **Hubungkan … Peserta Sekaligus**. Kelompok dibentuk menurut
+   nama dan tanggal sumber yang sama. Nama kosong tidak digabung menjadi
+   satu kelompok besar; contoh identitas peserta ditampilkan sebagai konteks.
+
+Pencocokan otomatis menormalkan Unicode, huruf besar/kecil, spasi, tanda baca,
+serta penulisan `&`/`and`/`dan`. Angka dan kata penting tetap dipertahankan.
+Tidak digunakan pencocokan samar berbasis kemiripan sebagian nama atau tebakan
+kata. Bila beberapa kegiatan memiliki nama yang sama, tanggal sumber harus
+membedakan satu tujuan. Tanggal yang bertentangan tetap ditahan, walaupun
+namanya mirip atau hanya ada satu calon kegiatan.
+
+Pemetaan kelompok ke tujuan yang dipilih adalah keputusan manual: periksa
+nama, tanggal, dan program pada pilihan tujuan. Server memeriksa hak akses
+program dan hanya memproses data tertunda milik akun yang sedang digunakan.
+Peserta duplikat dilewati, daftar lama tetap ada, dan baris tertunda dihapus
+hanya setelah transaksi batch berhasil. Jika proses terputus, periksa ulang
+dan lanjutkan; batch yang sudah selesai tidak perlu diulang.
+
 ## 3. Impor hasil survei kepuasan
 
 1. Unduh **Template Survei Kepuasan 20 Pertanyaan**.

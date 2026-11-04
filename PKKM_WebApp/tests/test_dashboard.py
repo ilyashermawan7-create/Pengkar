@@ -419,6 +419,86 @@ class DashboardTests(unittest.TestCase):
             result=self.client.post('/api/migrate/participants',headers=headers,json={'items':[{'activityId':ident,'student':{'nama':'Uji'}}]})
             self.assertEqual(result.status_code,403,result.text)
 
+    def test_auto_connect_normalizes_titles_and_preview_does_not_write(self):
+        ident=self.create(self.activity(namaKegiatan='Webinar Mental — Social Media & Self-worth',participants=[],surveys=[]))
+        source=' webinar MENTAL : social media and self worth '
+        staged=[{'namaKegiatan':source,'importKey':'auto:'+str(i),'student':{'nim':str(100000000000+i),'nama':'Auto '+str(i)}} for i in range(5)]
+        self.client.post('/api/migrate/participants',headers=self.headers,json={'items':staged})
+        preview=self.client.post('/api/migrate/participants/pending/auto-connect',headers=self.headers,json={})
+        self.assertEqual(preview.status_code,200,preview.text)
+        self.assertEqual(preview.json()['summary']['matched'],5)
+        self.assertEqual(self.snapshot()['students'],[])
+        result=self.client.post('/api/migrate/participants/pending/auto-connect',headers=self.headers,json={'dry_run':False,'limit':2})
+        self.assertEqual(result.json()['processed'],2)
+        self.assertEqual(result.json()['remainingMatched'],3)
+        self.assertEqual(len(self.snapshot()['pendingParticipants']),3)
+        result=self.client.post('/api/migrate/participants/pending/auto-connect',headers=self.headers,json={'dry_run':False})
+        self.assertEqual(result.json()['processed'],3)
+        data=self.snapshot()
+        self.assertEqual(data['pendingParticipants'],[])
+        self.assertEqual({s['activityId'] for s in data['students']},{ident})
+        self.assertEqual(len(data['students']),5)
+
+    def test_auto_connect_does_not_guess_same_name_on_different_dates_or_conflicting_dates(self):
+        self.create(self.activity(namaKegiatan='Nama Sama',tanggal='2026-11-04',participants=[],surveys=[]))
+        self.create(self.activity(namaKegiatan='Nama Sama',tanggal='2026-11-05',participants=[],surveys=[]))
+        staged=[{'namaKegiatan':'Nama Sama','importKey':'ambiguous','student':{'nama':'Uji'}},
+                {'namaKegiatan':'Nama Sama','tanggalKegiatan':'2026-11-06','importKey':'conflict','student':{'nama':'Uji'}}]
+        self.client.post('/api/migrate/participants',headers=self.headers,json={'items':staged})
+        response=self.client.post('/api/migrate/participants/pending/auto-connect',headers=self.headers,json={'dry_run':False})
+        self.assertEqual(response.json()['processed'],0)
+        data=self.snapshot()
+        self.assertEqual(len(data['pendingParticipants']),2)
+        self.assertEqual(data['students'],[])
+        preview=self.client.post('/api/migrate/participants/pending/auto-connect',headers=self.headers,json={}).json()
+        self.assertEqual(preview['summary']['ambiguous'],1)
+        self.assertEqual(preview['summary']['date_conflict'],1)
+
+    def test_auto_connect_uses_exact_date_to_disambiguate(self):
+        self.create(self.activity(namaKegiatan='Nama Sama',tanggal='2026-11-04',participants=[],surveys=[]))
+        target=self.create(self.activity(namaKegiatan='Nama Sama',tanggal='2026-11-05',participants=[],surveys=[]))
+        self.client.post('/api/migrate/participants',headers=self.headers,json={'items':[{'namaKegiatan':'nama sama',
+            'tanggalKegiatan':'2026-11-05','student':{'nim':'000000000006'}}]})
+        response=self.client.post('/api/migrate/participants/pending/auto-connect',headers=self.headers,json={'dry_run':False})
+        self.assertEqual(response.json()['created'],1)
+        self.assertEqual(self.snapshot()['students'][0]['activityId'],target)
+
+    def test_group_connect_resolves_whole_named_group_without_mixing_other_group(self):
+        target=self.create(self.activity(participants=[],surveys=[]))
+        staged=[{'namaKegiatan':'Nama File Lama','importKey':str(i),'student':{'nim':str(100000000000+i)}} for i in range(4)]
+        staged.append({'namaKegiatan':'Kelompok Lain','importKey':'other','student':{'nama':'Lain'}})
+        self.client.post('/api/migrate/participants',headers=self.headers,json={'items':staged})
+        preview=self.client.post('/api/migrate/participants/pending/auto-connect',headers=self.headers,json={}).json()
+        group=next(group for group in preview['groups'] if group['name']=='Nama File Lama')
+        response=self.client.post('/api/migrate/participants/pending/auto-connect',headers=self.headers,json={
+            'dry_run':False,'groupKey':group['key'],'activityId':target})
+        self.assertEqual(response.json()['processed'],4)
+        self.assertEqual(len(self.snapshot()['students']),4)
+        self.assertEqual(len(self.snapshot()['pendingParticipants']),1)
+
+    def test_auto_connect_is_limited_to_current_user_and_allowed_program(self):
+        target=self.create(self.activity(program='Asrama',participants=[],surveys=[]))
+        self.client.post('/api/migrate/participants',headers=self.headers,json={'items':[{
+            'namaKegiatan':'Kegiatan uji','student':{'nama':'Admin Pending'}}]})
+        _,headers=self.new_user('match-pengkar','pengkar')
+        self.client.post('/api/migrate/participants',headers=headers,json={'items':[{'namaKegiatan':'Kegiatan uji',
+            'student':{'nama':'Scoped Pending'}}]})
+        preview=self.client.post('/api/migrate/participants/pending/auto-connect',headers=headers,json={}).json()
+        self.assertEqual(preview['summary']['total'],1)
+        self.assertEqual(preview['summary']['matched'],0)
+        group=preview['groups'][0]
+        response=self.client.post('/api/migrate/participants/pending/auto-connect',headers=headers,json={
+            'dry_run':False,'groupKey':group['key'],'activityId':target})
+        self.assertEqual(response.status_code,403)
+        self.assertEqual(len(self.snapshot()['pendingParticipants']),1)
+        self.assertEqual(len(self.snapshot(headers)['pendingParticipants']),1)
+
+    def test_auto_connect_rejects_readonly_roles_and_invalid_batch_limits(self):
+        for username,role in [('match-viewer','viewer'),('match-verifier','verifier')]:
+            _,headers=self.new_user(username,role)
+            self.assertEqual(self.client.post('/api/migrate/participants/pending/auto-connect',headers=headers,json={}).status_code,403)
+        self.assertEqual(self.client.post('/api/migrate/participants/pending/auto-connect',headers=self.headers,json={'limit':1001}).status_code,422)
+
 
 if __name__ == '__main__':
     unittest.main()

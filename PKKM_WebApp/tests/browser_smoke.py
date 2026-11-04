@@ -428,9 +428,9 @@ def main():
                 migration.get_by_role('button',name='Migrasikan 1 Peserta Kegiatan',exact=True).click()
                 expect(migration).to_contain_text('1 peserta disimpan untuk dicocokkan')
                 pending_participants=page.get_by_label('Peserta perlu dicocokkan',exact=True)
-                pending_participants.locator('select').select_option(str(target_a))
-                pending_participants.get_by_role('button',name='Hubungkan Peserta',exact=True).click()
-                expect(migration).to_contain_text('Peserta berhasil dihubungkan ke kegiatan.')
+                pending_participants.locator('select[aria-label^="Kegiatan untuk kelompok peserta "]').select_option(str(target_a))
+                pending_participants.get_by_role('button',name='Hubungkan 1 Peserta Sekaligus',exact=True).click()
+                expect(migration).to_contain_text('Selesai: 1 peserta diproses, 1 hubungan baru')
                 snapshot=page.request.get(url+'/api/dashboard',headers=auth).json()
                 assert not snapshot['pendingParticipants']
                 assert any(row['nim']=='000000000405' and row['activityId']==target_a for row in snapshot['students'])
@@ -476,6 +476,54 @@ def main():
                 expect(listing.locator('tbody tr')).to_have_count(10)
                 page.screenshot(path=str(ARTIFACTS/'pagination-kegiatan.png'),full_page=True)
                 print('PASS: activity pagination 10/50/all, next/previous, filter reset, and exports contain every filtered record')
+                auto_activity=page.request.post(url+'/api/dashboard/activities',headers=auth,data={
+                    'namaKegiatan':'Webinar Auto — Kesehatan & Karakter','tanggal':'2026-11-04','program':'Pengembangan Karakter','kategori':'Uji Auto'})
+                assert auto_activity.status==201,auto_activity.text()
+                auto_id=auto_activity.json()['id']
+                ambiguous_ids=[]
+                for date in ['2025-11-04','2026-11-04']:
+                    created=page.request.post(url+'/api/dashboard/activities',headers=auth,data={
+                        'namaKegiatan':'Webinar Ambigu','tanggal':date,'program':'Pengembangan Karakter','kategori':'Uji Auto'})
+                    assert created.status==201,created.text()
+                    ambiguous_ids.append(created.json()['id'])
+                staged=[{'namaKegiatan':'webinar auto: kesehatan and karakter','importKey':'ui-auto:'+str(i),
+                    'student':{'nim':str(800000000000+i),'nama':'Auto UI '+str(i)}} for i in range(1105)]
+                staged.extend([{'namaKegiatan':'Webinar Ambigu','importKey':'ui-ambiguous:'+str(i),
+                    'student':{'nim':str(810000000000+i),'nama':'Ambigu UI '+str(i)}} for i in range(3)])
+                staged.append({'namaKegiatan':'webinar auto: kesehatan and karakter','tanggalKegiatan':'2026-11-05','importKey':'ui-date-conflict',
+                    'student':{'nim':'820000000000','nama':'Tanggal Berbeda'}})
+                response=page.request.post(url+'/api/migrate/participants',headers=auth,data={'items':staged})
+                assert response.status==200,response.text()
+                assert response.json()['pending']==1109
+                page.reload()
+                expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
+                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                migration=page.get_by_role('region',name='Migrasi data kegiatan dan survei',exact=True)
+                matcher=page.get_by_role('region',name='Peserta perlu dicocokkan',exact=True)
+                expect(matcher.get_by_role('button',name='Hubungkan Otomatis (1105)',exact=True)).to_be_enabled()
+                before=page.request.get(url+'/api/dashboard',headers=auth).json()
+                assert len(before['pendingParticipants'])==1109
+                matcher.get_by_role('button',name='Hubungkan Otomatis (1105)',exact=True).click()
+                expect(migration).to_contain_text('Selesai: 1105 peserta diproses, 1105 hubungan baru',timeout=60000)
+                after=page.request.get(url+'/api/dashboard',headers=auth).json()
+                assert len(after['pendingParticipants'])==4
+                assert sum(s['activityId']==auto_id for s in after['students'])==1105
+                expect(matcher.get_by_role('button',name='Hubungkan Otomatis (0)',exact=True)).to_be_disabled()
+                print('PASS: one-click auto-connect processes 1105 pending participants in multiple batches, ignoring punctuation/case')
+                preview=page.request.post(url+'/api/migrate/participants/pending/auto-connect',headers=auth,data={}).json()
+                assert preview['summary']['ambiguous']==3 and preview['summary']['date_conflict']==1
+                group=next(g for g in preview['groups'] if g['name']=='Webinar Ambigu')
+                matcher.get_by_label('Kegiatan untuk kelompok peserta '+group['key'],exact=True).select_option(str(ambiguous_ids[0]))
+                matcher.get_by_role('button',name='Hubungkan 3 Peserta Sekaligus',exact=True).click()
+                expect(migration).to_contain_text('Selesai: 3 peserta diproses, 3 hubungan baru')
+                after=page.request.get(url+'/api/dashboard',headers=auth).json()
+                assert len(after['pendingParticipants'])==1
+                assert after['pendingParticipants'][0]['student']['nama']=='Tanggal Berbeda'
+                assert sum(s['activityId']==ambiguous_ids[0] for s in after['students'])==3
+                retry=page.request.post(url+'/api/migrate/participants/pending/auto-connect',headers=auth,data={'dry_run':False}).json()
+                assert retry['processed']==0
+                page.screenshot(path=str(ARTIFACTS/'hubungkan-otomatis.png'),full_page=True)
+                print('PASS: ambiguous/date-conflicting records are retained; one explicit group mapping links all selected participants')
                 assert not errors, errors
                 print('PASS: mobile navigation; no browser JavaScript errors')
                 browser.close()

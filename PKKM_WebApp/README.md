@@ -18,6 +18,9 @@ memiliki kegiatan tujuan disimpan untuk dicocokkan belakangan.
 Impor peserta kegiatan tersedia sebagai bagian tersendiri pada panel migrasi,
 dengan template dan pencocokan kegiatan. Daftar kegiatan mendukung tampilan
 10, 50, atau Semua tanpa membatasi data yang diekspor.
+Peserta tertunda dapat diproses melalui **Hubungkan Otomatis** untuk
+kecocokan unik, atau dihubungkan per kelompok nama kegiatan sekaligus.
+Pratinjau dan progres tersedia; nama ambigu atau tanggal konflik tidak ditebak.
 
 ## Menjalankan (Windows PowerShell)
 
