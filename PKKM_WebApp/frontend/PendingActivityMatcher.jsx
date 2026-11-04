@@ -2,6 +2,22 @@ import React,{useEffect,useState} from 'react';
 
 const statusLabels={matched:'Cocok unik',ambiguous:'Lebih dari satu kegiatan',unmatched:'Nama belum ditemukan',date_conflict:'Tanggal tidak cocok',blank:'Nama kegiatan belum diisi'};
 
+function ActivityDestination({activities,value,onChange,disabled,label}){
+  const [query,setQuery]=useState('');
+  const terms=query.normalize('NFKC').toLocaleLowerCase('id').trim().split(/\s+/).filter(Boolean);
+  const matches=activities.filter(activity=>{
+    const text=[activity.namaKegiatan,activity.tanggal,activity.tahun,activity.program,activity.id].join(' ').normalize('NFKC').toLocaleLowerCase('id');
+    return terms.every(term=>text.includes(term));
+  });
+  const selected=activities.find(activity=>String(activity.id)===String(value));
+  const options=selected&&!matches.includes(selected)?[selected,...matches]:matches;
+  return <div className="flex-1 min-w-48 space-y-2">
+    <input type="search" aria-label={'Cari '+label.toLowerCase()} placeholder="Cari kegiatan tujuan: nama, tanggal, program, atau ID" value={query} onChange={event=>setQuery(event.target.value)} disabled={disabled} className="border rounded-lg p-2 w-full"/>
+    {query.trim()&&<p role="status" className="text-slate-500">{matches.length?`${matches.length} kegiatan ditemukan`:'Tidak ada kegiatan yang cocok. Ubah kata pencarian.'}{selected&&!matches.includes(selected)?' Pilihan sebelumnya tetap dipertahankan.':''}</p>}
+    <select aria-label={label} disabled={disabled} value={value} onChange={onChange} className="border rounded-lg p-2 w-full"><option value="">Pilih kegiatan tujuan untuk kelompok ini</option>{options.map(activity=><option key={activity.id} value={activity.id}>{activity.namaKegiatan||'Nama belum diisi'} · {activity.tanggal||activity.tahun||'Tanggal belum diisi'} · {activity.program} · ID {activity.id}</option>)}</select>
+  </div>;
+}
+
 export default function PendingActivityMatcher({activities,pending,api,reload,disabled=false,onComplete,kind='participants'}){
   const noun=kind==='surveys'?'survei':'peserta';
   const capital=kind==='surveys'?'Survei':'Peserta';
@@ -68,7 +84,7 @@ export default function PendingActivityMatcher({activities,pending,api,reload,di
     {error&&<p role="alert" className="bg-red-50 text-red-800 p-3 text-sm rounded-lg">{error}</p>}
     <div className="flex flex-wrap gap-3 items-center"><input aria-label={'Cari kelompok '+noun+' tertunda'} placeholder="Cari nama kegiatan atau identitas" value={search} onChange={event=>{setSearch(event.target.value);setPage(1);}} className="border rounded-lg p-2 text-xs flex-1 min-w-48"/><label className="text-xs">Tampilkan kelompok<select aria-label={'Jumlah kelompok '+noun+' per halaman'} value={size} onChange={event=>{setSize(event.target.value);setPage(1);}} className="border rounded-lg p-2 ml-2"><option value="10">10</option><option value="50">50</option><option value="all">Semua (All)</option></select></label></div>
     <p className="text-xs text-slate-500">Untuk nama yang belum cocok, pilih tujuan sekali lalu hubungkan seluruh kelompok dengan nama dan tanggal sumber yang sama. Pilihan ini adalah pencocokan manual; periksa judul, tanggal, dan program tujuan.</p>
-    {visible.map(group=><div key={group.key} className="border-t pt-3 space-y-2 text-xs"><div><b>{group.name||'Nama kegiatan belum diisi'}</b> · {group.date||'Tanggal belum diisi'} · <b>{group.count} {noun}</b> · {statusLabels[group.status]}</div>{group.examples.length>0&&<p className="text-slate-500">Contoh {kind==='surveys'?'responden':'peserta'}: {group.examples.join(', ')}</p>}{group.status==='matched'&&<p className="text-emerald-800">Tujuan otomatis: {group.targetName} (ID {group.targetId})</p>}<div className="flex flex-wrap gap-2"><select aria-label={'Kegiatan untuk kelompok '+noun+' '+group.key} disabled={busy||disabled} value={targets[group.key]||''} onChange={event=>setTargets({...targets,[group.key]:event.target.value})} className="border rounded-lg p-2 flex-1 min-w-48"><option value="">Pilih kegiatan tujuan untuk kelompok ini</option>{activities.map(activity=><option key={activity.id} value={activity.id}>{activity.namaKegiatan||'Nama belum diisi'} · {activity.tanggal||activity.tahun||'Tanggal belum diisi'} · {activity.program} · ID {activity.id}</option>)}</select><button disabled={busy||disabled||!targets[group.key]} onClick={()=>connect(group)} className="border rounded-lg p-2">Hubungkan {group.count} {capital} Sekaligus</button></div></div>)}
+    {visible.map(group=><div key={group.key} className="border-t pt-3 space-y-2 text-xs"><div><b>{group.name||'Nama kegiatan belum diisi'}</b> · {group.date||'Tanggal belum diisi'} · <b>{group.count} {noun}</b> · {statusLabels[group.status]}</div>{group.examples.length>0&&<p className="text-slate-500">Contoh {kind==='surveys'?'responden':'peserta'}: {group.examples.join(', ')}</p>}{group.status==='matched'&&<p className="text-emerald-800">Tujuan otomatis: {group.targetName} (ID {group.targetId})</p>}<div className="flex flex-wrap gap-2"><ActivityDestination activities={activities} label={'Kegiatan untuk kelompok '+noun+' '+group.key} disabled={busy||disabled} value={targets[group.key]||''} onChange={event=>setTargets({...targets,[group.key]:event.target.value})}/><button disabled={busy||disabled||!targets[group.key]} onClick={()=>connect(group)} className="border rounded-lg p-2">Hubungkan {group.count} {capital} Sekaligus</button></div></div>)}
     {plan&&!visible.length&&<p className="text-xs text-slate-500">Tidak ada kelompok yang sesuai pencarian.</p>}
     <nav aria-label={'Halaman kelompok '+noun} className="flex gap-3 items-center text-xs"><button disabled={busy||current===1} onClick={()=>setPage(current-1)} className="border rounded-lg p-2">Sebelumnya</button><span>Halaman {current} dari {pages} · {groups.length} kelompok</span><button disabled={busy||current===pages} onClick={()=>setPage(current+1)} className="border rounded-lg p-2">Berikutnya</button></nav>
   </section>;

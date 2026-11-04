@@ -220,3 +220,8 @@ Proses berjalan per 1.000 respons dengan progres. Jawaban asli, kolom kosong,
 dan saran tetap dipertahankan; respons duplikat dilewati. Jika nama ambigu,
 pilih kegiatan tujuan sekali pada kelompok lalu tekan **Hubungkan Survei
 Sekaligus**. Pilihan tampilan kelompok tersedia 10, 50, dan Semua.
+
+Pada setiap kelompok peserta maupun survei, kolom **Cari kegiatan tujuan**
+menyaring pilihan berdasarkan nama, tanggal (YYYY-MM-DD), tahun, program,
+atau ID. Beberapa kata pencarian dapat digabungkan, misalnya nama dan tahun.
+Pilihan tujuan yang sudah dipilih tetap dipertahankan saat pencarian berubah.

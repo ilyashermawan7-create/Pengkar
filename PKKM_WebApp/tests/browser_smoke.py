@@ -513,7 +513,17 @@ def main():
                 preview=page.request.post(url+'/api/migrate/participants/pending/auto-connect',headers=auth,data={}).json()
                 assert preview['summary']['ambiguous']==3 and preview['summary']['date_conflict']==1
                 group=next(g for g in preview['groups'] if g['name']=='Webinar Ambigu')
-                matcher.get_by_label('Kegiatan untuk kelompok peserta '+group['key'],exact=True).select_option(str(ambiguous_ids[0]))
+                destination=matcher.get_by_label('Kegiatan untuk kelompok peserta '+group['key'],exact=True)
+                find=matcher.get_by_label('Cari kegiatan untuk kelompok peserta '+group['key'],exact=True)
+                find.fill('WEBINAR AMBIGU 2025')
+                expect(destination.locator('option')).to_have_count(2)
+                find.fill('tidak-ada-kegiatan-ini')
+                expect(destination.locator('option')).to_have_count(1)
+                find.fill(str(ambiguous_ids[0]))
+                destination.select_option(str(ambiguous_ids[0]))
+                find.fill('tidak-ada-kegiatan-ini')
+                expect(destination).to_have_value(str(ambiguous_ids[0]))
+
                 matcher.get_by_role('button',name='Hubungkan 3 Peserta Sekaligus',exact=True).click()
                 expect(migration).to_contain_text('Selesai: 3 peserta diproses, 3 hubungan baru')
                 after=page.request.get(url+'/api/dashboard',headers=auth).json()
