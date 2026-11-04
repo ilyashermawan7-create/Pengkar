@@ -2,7 +2,7 @@ import {jsPDF} from 'jspdf';
 import {autoTable} from 'jspdf-autotable';
 import surveySchema from '../survey_schema.json';
 import {average} from './statistics.mjs';
-import {calculateCsi,csiMethod} from './csi.mjs';
+import {calculateCsi,csiMethod,CSI_DIVISOR} from './csi.mjs';
 
 let fontPromise;
 async function reportFont() {
@@ -75,7 +75,7 @@ export async function downloadReportPdf({activities,students,surveys,filters,pre
   if(satisfaction.length)table('Survei Kepuasan — Pertanyaan Asli',['No.','Pertanyaan','Respons','Rerata / 5','Persentase'],surveySchema.questions.map((question,index)=>{
     const values=satisfaction.map(response=>response.answers[index]).filter(value=>value!==null);
     const mean=average(values);
-    return [index+1,question,values.length,mean===null?'—':mean.toFixed(2),mean===null?'—':(mean*20).toFixed(1)+'%'];
+    return [index+1,question,values.length,mean===null?'—':mean.toFixed(2),mean===null?'—':(mean/CSI_DIVISOR*100).toFixed(1)+'%'];
   }));
   const pages=doc.getNumberOfPages();
   for(let page=1;page<=pages;page++){

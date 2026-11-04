@@ -232,7 +232,7 @@ Dashboard, ekspor jawaban Excel (sheet Perhitungan CSI / Metode CSI), dan PDF
 menggunakan CSI dengan asumsi bobot setara, karena instrumen asli belum
 mengumpulkan nilai kepentingan. Pertanyaan dan jawaban asli tidak diubah.
 MSS dihitung per pertanyaan dari jawaban valid skala 1–5, WF = 1/k,
-WS = WF × MSS, dan CSI = jumlah WS / 5 × 100%. Dengan 20 pertanyaan
+WS = WF × MSS, dan CSI = jumlah WS / 4 × 100%. Dengan 20 pertanyaan
 terwakili, setiap bobot adalah 5%. Format survei lama tidak dicampur.
 
 Kolom kosong diabaikan, bukan diisi nol. Jika sebagian pertanyaan sama sekali
@@ -242,3 +242,6 @@ hasil ditandai sementara, disertai cakupan k/20. Kategori operasional:
 >65–80% puas; >80% sangat puas. Ini konvensi pelaporan, bukan standar universal.
 CSI berbobot kepentingan memerlukan data MIS tersendiri; bobot tersebut
 belum tersedia dan tidak direkayasa dari nilai kepuasan.
+
+Pembagi CSI ditetapkan 4. Nilai jawaban asli tetap dipertahankan; hasil tidak
+dibatasi otomatis ke 100% jika rerata jawaban melebihi 4.

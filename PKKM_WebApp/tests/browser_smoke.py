@@ -307,7 +307,7 @@ def main():
                 expect(survey_summary.get_by_text(schema['questions'][0],exact=True)).to_be_visible()
                 expect(survey_summary).to_contain_text('2 respons instrumen 20 pertanyaan')
                 item_means=[sum(values)/len(values) for i in range(20) if (values:=[r['answers'][i] for r in full if r['answers'][i] is not None])]
-                expected_csi=sum(item_means)/len(item_means)/5*100
+                expected_csi=sum(item_means)/len(item_means)/4*100
                 expect(survey_summary).to_contain_text(f'{expected_csi:.2f}%')
                 expect(survey_summary).to_contain_text('20/20 pertanyaan terwakili')
                 with page.expect_download() as exported20:

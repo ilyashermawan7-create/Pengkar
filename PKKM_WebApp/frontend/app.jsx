@@ -689,11 +689,11 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                         Evaluasi komprehensif berdasarkan {filteredSurveys.length} respons mahasiswa peserta kegiatan pembinaan karakter.
                       </p>
                       <p className="text-xs text-slate-500 mt-1">{csi.responses} respons instrumen 20 pertanyaan · {csi.coverage}/20 pertanyaan memiliki nilai. {csi.provisional?'Hasil sementara; data belum lengkap.':'Seluruh pertanyaan terwakili.'}</p>
-                      <details className="text-xs text-slate-500 mt-2"><summary className="cursor-pointer">Metode perhitungan CSI dan kategori</summary><p>{csiMethod}</p><p>Kategori operasional skala 1–5: ≤35% tidak puas; &gt;35–50% kurang puas; &gt;50–65% cukup puas; &gt;65–80% puas; &gt;80% sangat puas. Ambang kategori adalah konvensi pelaporan, bukan standar universal.</p></details>
+                      <details className="text-xs text-slate-500 mt-2"><summary className="cursor-pointer">Metode perhitungan CSI dan kategori</summary><p>{csiMethod}</p><p>Kategori operasional CSI: ≤35% tidak puas; &gt;35–50% kurang puas; &gt;50–65% cukup puas; &gt;65–80% puas; &gt;80% sangat puas. Ambang kategori adalah konvensi pelaporan, bukan standar universal.</p></details>
                     </div>
                     <div className="text-right bg-red-50 p-3 rounded-2xl border border-red-100">
                       <span className="text-[10px] font-bold text-[#D71920] block uppercase tracking-wider">CSI Bobot Setara{csi.provisional?' (sementara)':''}</span>
-                      <span className="text-3xl font-black text-slate-900">{csi.percent===null?"—":csi.percent.toFixed(2)+"%"}</span><p className="text-xs text-slate-500">{csi.status} · MSS {csi.score===null?'—':csi.score.toFixed(2)} / 5</p>
+                      <span className="text-3xl font-black text-slate-900">{csi.percent===null?"—":csi.percent.toFixed(2)+"%"}</span><p className="text-xs text-slate-500">{csi.status} · MSS {csi.score===null?'—':csi.score.toFixed(2)} · Pembagi CSI 4</p>
                     </div>
                   </div>
 
