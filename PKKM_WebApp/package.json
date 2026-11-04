@@ -1,0 +1,19 @@
+{
+  "name": "pkkm-dashboard",
+  "private": true,
+  "version": "2.0.0",
+  "scripts": {
+    "build": "node frontend/copy-fonts.cjs && esbuild frontend/app.jsx --bundle --minify --outfile=static/app.js --legal-comments=linked && tailwindcss -i frontend/styles.css -o static/app.css --minify"
+  },
+  "dependencies": {
+    "@fontsource/plus-jakarta-sans": "5.2.8",
+    "chart.js": "4.4.9",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "xlsx": "0.18.5"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "tailwindcss": "3.4.17"
+  }
+}

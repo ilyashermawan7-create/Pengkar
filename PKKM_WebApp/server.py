@@ -45,6 +45,9 @@ with connect() as c:
         else:
             print('SETUP: set PKKM_ADMIN_USER and PKKM_ADMIN_PASSWORD (min 12 chars), then restart to create initial administrator.')
 
+from dashboard_api import initialize, register
+initialize(connect)
+
 def audit(c,user,action,entity,entity_id):
     c.execute('INSERT INTO audit(user_id,action,entity,entity_id) VALUES(?,?,?,?)',(user['id'],action,entity,entity_id))
 
@@ -52,14 +55,14 @@ def auth(authorization:Optional[str]=Header(None)):
     if not authorization or not authorization.startswith('Bearer '):raise HTTPException(401,'Login diperlukan')
     token=authorization[7:]
     with connect() as c:
-        u=c.execute('''SELECT u.id,u.username,u.full_name,u.role FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at > ? AND u.active=1''',(hashlib.sha256(token.encode()).hexdigest(),datetime.datetime.now(datetime.timezone.utc).isoformat())).fetchone()
+        u=c.execute('''SELECT u.id,u.username,u.full_name,COALESCE(NULLIF(u.dashboard_role,''),u.role) AS role,u.email,u.institution,u.campus FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at > ? AND u.active=1''',(hashlib.sha256(token.encode()).hexdigest(),datetime.datetime.now(datetime.timezone.utc).isoformat())).fetchone()
     if not u:raise HTTPException(401,'Sesi kedaluwarsa')
     return dict(u)
 
 def allow(u,program=None,admin=False):
     if admin and u['role']!='admin':raise HTTPException(403,'Hanya administrator')
-    if u['role']=='viewer':raise HTTPException(403,'Akses baca saja')
-    if program and u['role'] not in ('admin', 'pengkar' if program=='Pengembangan Karakter' else 'asrama'):
+    if u['role'] in ('viewer','verifier'):raise HTTPException(403,'Akses baca saja')
+    if program and u['role'] not in ('admin','operator', 'pengkar' if program=='Pengembangan Karakter' else 'asrama'):
         raise HTTPException(403,'Tidak berwenang pada program ini')
 
 class Login(BaseModel):
@@ -106,6 +109,10 @@ class Activity(BaseModel):
 FIELDS=['nama_kegiatan','tanggal','program','kategori','tempat','unit_kerjasama','pembicara','target_peserta','jumlah_peserta','anggaran','realisasi','laporan','kendala','tindak_lanjut','link_eviden','status']
 @app.get('/api/activities')
 def activities(program:str='',year:str='',status:str='',u=Depends(auth)):
+    if u['role'] in ('pengkar','asrama'):
+        permitted='Asrama' if u['role']=='asrama' else 'Pengembangan Karakter'
+        if program and program!=permitted:return []
+        program=permitted
     clauses=[];args=[]
     if program:clauses.append('a.program=?');args.append(program)
     if year:clauses.append("substr(a.tanggal,1,4)=?");args.append(year)
@@ -200,6 +207,8 @@ def create_user(data:NewUser,u=Depends(auth)):
 def audit_log(u=Depends(auth)):
     allow(u,admin=True)
     with connect() as c:return [dict(r) for r in c.execute('SELECT a.*,u.username FROM audit a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.id DESC LIMIT 100')]
+
+register(app,connect,auth,allow,audit,hash_password,check_password)
 
 app.mount('/static',StaticFiles(directory=BASE/'static'),name='static')
 @app.get('/')

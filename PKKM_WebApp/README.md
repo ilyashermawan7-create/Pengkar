@@ -2,6 +2,11 @@
 
 Pengembangan dari dashboard HTML KKA: difokuskan pada **Pengembangan Karakter** dan **Asrama**, dengan pelaporan, evaluasi, multi-user, dan SQLite terpusat.
 
+Dashboard kini mengikuti referensi `Pengkar.html`: grafik dan filter, formulir
+16 field, impor peserta/survei Excel atau CSV, pengelolaan akun, profil, serta
+penggantian username dan password. Lihat [panduan pengembangan](DEVELOPMENT.md)
+untuk lokasi kode, perhitungan, migrasi data, dan cara membangun frontend.
+
 ## Menjalankan (Windows PowerShell)
 
 ```powershell
@@ -19,7 +24,7 @@ Buka http://127.0.0.1:8000. **Ubah password contoh di atas** sebelum penggunaan.
 ## Multi-user dan server bersama
 
 - Jalankan di **satu server** yang bisa diakses pengguna melalui jaringan kampus; semua pengguna berbagi database SQLite di server tersebut (`pkkm.sqlite3`). Jangan menyalin database ke komputer masing-masing.
-- Role: `admin` (semua data dan pengguna), `pengkar` (mengelola program Pengembangan Karakter), `asrama` (mengelola program Asrama), `viewer` (baca/ekspor saja).
+- Role: `admin` (semua data dan pengguna), `operator` (kedua program), `pengkar` (program Pengembangan Karakter), `asrama` (program Asrama), `verifier` (impor respons survei), `viewer` (baca/ekspor saja).
 - Untuk akses dari luar localhost, wajib pasang reverse proxy HTTPS, firewall, pembatasan jaringan/VPN, dan kebijakan backup. **Jangan mengekspos `uvicorn` langsung ke internet.**
 - Backup database menggunakan SQLite backup API / `sqlite3 .backup`, bukan menyalin file aktif tanpa konsistensi. Batasi hak akses file DB pada akun layanan.
 - Untuk produksi skala besar, migrasikan SQLite ke PostgreSQL, tambahkan SSO kampus, MFA, reset password, rate limiting login, monitoring, dan kebijakan retensi data.
@@ -35,9 +40,9 @@ Buka http://127.0.0.1:8000. **Ubah password contoh di atas** sebelum penggunaan.
 ## Batasan & migrasi
 
 - **Data lama dari file HTML belum otomatis dipindahkan**. Dashboard lama menggunakan localStorage dan struktur field berbeda; diperlukan pemetaan dan persetujuan sebelum impor, terutama bila memuat data pribadi mahasiswa.
-- Tidak ada data mahasiswa individual di versi ini; yang dicatat adalah agregat kegiatan dan survei. Tidak ada skor survei buatan.
+- Daftar mahasiswa dan respons survei individual dapat diimpor melalui form kegiatan. Tidak ada data contoh atau skor survei buatan yang otomatis dimasukkan ke database.
 - Belum tersedia unggah file eviden (menggunakan tautan URL), lampiran laporan PDF, approval berjenjang, atau survei responden langsung.
-- Jumlah peserta = total kehadiran lintas kegiatan, bukan jumlah mahasiswa unik. Skor dampak = rerata skor kegiatan yang dievaluasi, bukan bukti perubahan karakter jangka panjang.
+- Jumlah peserta = total kehadiran lintas kegiatan. Peserta unik dihitung dari NIM pada daftar peserta yang diimpor. Analisis dashboard memakai respons survei individual; API ringkasan lama tetap memakai evaluasi agregat kegiatan. Skor survei bukan bukti perubahan karakter jangka panjang.
 - Ini versi awal fungsional untuk uji coba internal, **belum lolos audit keamanan dan belum dinyatakan siap produksi**.
 
 ## API

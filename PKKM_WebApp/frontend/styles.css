@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+.custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+button:disabled { opacity: .55; cursor: not-allowed; }
+@media print {
+  aside, header, button, .no-print { display: none !important; }
+  main { padding: 0 !important; }
+}
+
+@font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 300; font-display: swap; src: url('/static/fonts/plus-jakarta-sans-latin-300-normal.woff2') format('woff2'); }
+
+@font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('/static/fonts/plus-jakarta-sans-latin-400-normal.woff2') format('woff2'); }
+
+@font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url('/static/fonts/plus-jakarta-sans-latin-500-normal.woff2') format('woff2'); }
+
+@font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url('/static/fonts/plus-jakarta-sans-latin-600-normal.woff2') format('woff2'); }
+
+@font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url('/static/fonts/plus-jakarta-sans-latin-700-normal.woff2') format('woff2'); }
+
+@font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 800; font-display: swap; src: url('/static/fonts/plus-jakarta-sans-latin-800-normal.woff2') format('woff2'); }
