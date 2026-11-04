@@ -542,7 +542,7 @@ def main():
                 metric_fixtures=[
                     {'namaKegiatan':'Karakter Rasio 2030','jumlahPeserta':100,'program':'Pengembangan Karakter','kategori':'Pengembangan Karakter'},
                     {'namaKegiatan':'Pengkar Asrama Rasio 2030','jumlahPeserta':200,'program':'Asrama','kategori':'Pengembangan Karakter'},
-                    {'namaKegiatan':'PPKPT Asrama Rasio 2030','jumlahPeserta':300,'program':'Asrama','kategori':'PPKPT'},
+                    {'namaKegiatan':'PPKPT Rasio 2030','jumlahPeserta':300,'program':'Pengembangan Karakter','kategori':'PPKPT'},
                 ]
                 for record in metric_fixtures:
                     response=page.request.post(url+'/api/dashboard/activities',headers=auth,data={**record,'tanggal':'2030-11-04','urusan':'Pengembangan karakter'})
@@ -550,22 +550,22 @@ def main():
                 page.reload()
                 expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
                 page.get_by_label('Tahun',exact=True).select_option('2030')
-                expect(page.get_by_text('Total Kegiatan',exact=True).locator('..').locator('span').nth(1)).to_have_text('3')
-                expect(page.get_by_text('Total Peserta',exact=True).locator('..').locator('span').nth(1)).to_have_text('600')
-                expect(page.get_by_text('Rasio / target 45.000',exact=True).locator('..')).to_contain_text('1.33%')
+                expect(page.get_by_text('Total Kegiatan',exact=True).locator('..').locator('span').nth(1)).to_have_text('2')
+                expect(page.get_by_text('Total Peserta',exact=True).locator('..').locator('span').nth(1)).to_have_text('400')
+                expect(page.get_by_text('Rasio / target 45.000',exact=True).locator('..')).to_contain_text('0.89%')
                 expect(page.get_by_text('Peserta unik teridentifikasi (NIM)',exact=True).locator('..')).to_contain_text('0')
-                for label in ['Kegiatan Karakter','PPKPT','Kegiatan Asrama']:
+                for label in ['Kegiatan Karakter','PPKPT']:
                     expect(page.get_by_text(label,exact=True).locator('..').locator('span').nth(1)).to_have_text('1')
-                expect(page.get_by_label('Rincian perhitungan kegiatan',exact=True)).to_contain_text('1 Karakter + 1 PPKPT + 1 Asrama = 3 kegiatan')
+                expect(page.get_by_label('Rincian perhitungan kegiatan',exact=True)).to_contain_text('1 Karakter + 1 PPKPT + 0 Asrama = 2 kegiatan')
                 page.get_by_role('button',name='Laporan',exact=False).first.click()
                 listing=page.get_by_role('region',name='Daftar kegiatan tersimpan',exact=True)
-                expect(listing.locator('tbody tr')).to_have_count(3)
+                expect(listing.locator('tbody tr')).to_have_count(2)
                 with page.expect_download() as metrics_export:
                     listing.get_by_role('button',name='Ekspor Excel',exact=True).click()
                 verify_groups='''import * as XLSX from 'xlsx'; import fs from 'node:fs';
                     const book=XLSX.read(fs.readFileSync(process.argv[1]),{type:'buffer'});
                     const rows=XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
-                    if(rows.length!==3 || new Set(rows.map(r=>r.kelompokRekap)).size!==3)process.exit(1);'''
+                    if(rows.length!==2 || new Set(rows.map(r=>r.kelompokRekap)).size!==2)process.exit(1);'''
                 subprocess.run(['node','--input-type=module','-e',verify_groups,metrics_export.value.path()],cwd=ROOT,check=True)
                 print('PASS: ratio uses total attendance; exclusive category sums and activity list/export agree under the same filter')
                 result=page.request.post(url+'/api/dashboard/activities',headers=auth,data={'namaKegiatan':'Survei Auto & Karakter','tanggal':'2026-11-04','program':'Pengembangan Karakter'})
@@ -588,31 +588,29 @@ def main():
                 assert len(stored)==1573
                 assert stored[0]['answers']==[None,5]+[None]*18 and stored[0]['saran']=='Saran asli'
                 print('PASS: auto-connect 1574 surveys across batches, skip duplicates, preserve original partial answers')
-                result=page.request.post(url+'/api/dashboard/activities',headers=auth,data={'namaKegiatan':'Kegiatan Grup Asrama','tanggal':'2026-11-04','program':'Asrama','navigationGroup':'asrama'})
+                result=page.request.post(url+'/api/dashboard/activities',headers=auth,data={'namaKegiatan':'Kegiatan Grup Asrama','tanggal':'2026-11-04','program':'Asrama','navigationGroup':'asrama','surveys':[{'nim':'890000000000','answers':[2]*20}]})
                 assert result.status==201,result.text()
                 page.reload()
-                asrama_nav=page.get_by_role('region',name='Grup Asrama',exact=True)
-                asrama_nav.get_by_role('button',name='Asrama',exact=True).click()
-                asrama_nav.get_by_role('button',name='Dashboard',exact=False).click()
-                expect(page.get_by_text('Total Kegiatan',exact=True).locator('..').locator('span').nth(1)).to_have_text('1')
-                asrama_nav.get_by_role('button',name='Laporan',exact=False).click()
+                page.get_by_label('Grup Pengguna',exact=True).select_option('asrama')
+                expect(page.get_by_role('region',name='Survei kepuasan 20 pertanyaan',exact=True)).to_contain_text('1 respons instrumen 20 pertanyaan')
+                expect(page.get_by_role('region',name='Survei kepuasan 20 pertanyaan',exact=True)).to_contain_text('47.50%')
+                expect(page.get_by_text('Total Kegiatan',exact=True).locator('..').locator('span').nth(1)).to_have_text('2')
+                page.get_by_role('button',name='Laporan',exact=False).first.click()
                 expect(page.get_by_text('Input Kegiatan Asrama',exact=True)).to_be_visible()
                 listing=page.get_by_role('region',name='Daftar kegiatan tersimpan',exact=True)
-                expect(listing.locator('tbody tr')).to_have_count(1)
+                expect(listing.locator('tbody tr')).to_have_count(2)
                 expect(listing).to_contain_text('Kegiatan Grup Asrama')
-                ppk_nav=page.get_by_role('region',name='Grup PPK Tel-U',exact=True)
-                ppk_nav.get_by_role('button',name='PPK Tel-U',exact=True).click()
-                ppk_nav.get_by_role('button',name='Dashboard',exact=False).click()
+                expect(listing).to_contain_text('Pengkar Asrama Rasio 2030')
+                page.get_by_label('Grup Pengguna',exact=True).select_option('ppk-telu')
                 expect(page.get_by_text('Total Kegiatan',exact=True).locator('..').locator('span').nth(1)).to_have_text('0')
-                ppk_nav.get_by_role('button',name='Laporan',exact=False).click()
+                page.get_by_role('button',name='Laporan',exact=False).first.click()
                 page.get_by_label('Nama Kegiatan',exact=True).fill('Kegiatan Grup PPK Tel-U')
                 page.get_by_role('button',name='Simpan & Publikasikan Kegiatan',exact=True).click()
                 expect(page.get_by_text('Kegiatan berhasil disimpan di server.',exact=True)).to_be_visible()
                 snapshot=page.request.get(url+'/api/dashboard',headers=auth).json()
                 assert next(a for a in snapshot['activities'] if a['namaKegiatan']=='Kegiatan Grup PPK Tel-U')['navigationGroup']=='ppk-telu'
                 page.reload()
-                pengkar_nav=page.get_by_role('region',name='Grup Pengkar',exact=True)
-                pengkar_nav.get_by_role('button',name='Laporan',exact=False).click()
+                page.get_by_role('button',name='Laporan',exact=False).first.click()
                 listing=page.get_by_role('region',name='Daftar kegiatan tersimpan',exact=True)
                 expect(listing).not_to_contain_text('Kegiatan Grup PPK Tel-U')
                 expect(listing).not_to_contain_text('Kegiatan Grup Asrama')

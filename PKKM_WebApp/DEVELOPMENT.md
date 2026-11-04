@@ -211,16 +211,20 @@ daftar akun yang diterima juga dibatasi ke tiga role tersebut. Pembuatan dan
 penonaktifan admin, operator lain, maupun verifier ditolak server. Hak penuh
 Super Admin dan pembatasan program Operator Pengkar/Asrama tetap berlaku.
 
-## Grup navigasi
+## Grup pengguna dan cakupan data
 
-Sidebar memiliki grup Pengkar, Asrama, dan PPK Tel-U, masing-masing dengan
-Dashboard dan Laporan. Pengaturan Admin dan Pengaturan tetap di luar grup.
-Setiap kegiatan menyimpan `navigationGroup` (`pengkar`, `asrama`, `ppk-telu`)
-di activity_details. Record lama tanpa atribut tersebut tetap tampil sebagai
-Pengkar, terlepas dari kategori/program lama; tidak ada pemindahan data massal.
-PPK Tel-U adalah grup tersendiri dan tidak disamakan otomatis dengan PPKPT.
+Sidebar memakai dropdown Grup Pengguna: Pengkar, Asrama, dan PPK Tel-U.
+Dashboard dan Laporan mengikuti pilihan tersebut; Pengaturan Admin dan
+Pengaturan tetap menjadi menu umum. Dropdown tidak mengubah role akun.
 
-Filter, metrik, grafik, rekap peserta, survei, dan ekspor mengikuti grup aktif.
-Form menandai kegiatan baru dengan grup aktif; pergantian grup mereset filter
-dan draft form. Hak akses program yang sudah ada tetap diperiksa backend.
-Migrasi lama dan master mahasiswa tetap tersedia di Pengkar sesuai role.
+Data Asrama dikenali dari program Asrama, penanda grup Asrama, atau klasifikasi
+kegiatan Asrama. Data tersebut dikeluarkan dari Pengkar, termasuk data lama
+berpenanda navigationGroup=pengkar. Pengkar menampilkan kegiatan Pengembangan
+Karakter dan PPKPT. PPK Tel-U tetap grup eksplisit tersendiri, berbeda dari
+PPKPT. Pemisahan tampilan tidak mengubah atau menghapus record lama.
+
+Jumlah peserta, kegiatan, grafik, rekap, survei, CSI, dan ekspor mengikuti ID
+kegiatan yang lolos filter grup. Survei selalu mengikuti kegiatan asalnya.
+Role dan pembatasan program backend tetap berlaku. Migrasi di Pengkar tetap
+menyediakan seluruh kegiatan yang boleh diakses agar migrasi data lama Asrama
+tetap dapat dilakukan. Grup baru disimpan melalui atribut navigationGroup.

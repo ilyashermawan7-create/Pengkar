@@ -30,7 +30,6 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       // 4 Menu Utama: 'dashboard' | 'laporan' | 'pengaturanAdmin' | 'pengaturan'
       const [activeNav, setActiveNav] = useState('dashboard');
       const [activeGroup,setActiveGroup]=useState('pengkar');
-      const [openGroup,setOpenGroup]=useState('pengkar');
       const groupLabel=navigationGroups.find(group=>group.id===activeGroup).label;
 
       const [students, setStudents] = useState([]);
@@ -157,7 +156,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         try {
           const result=await api('/login',{method:'POST',body:JSON.stringify({username:loginUser,password:loginPass})},'');
           await load(result.token);sessionStorage.setItem('pkkm_token',result.token);setToken(result.token);
-          setIsLoggedIn(true);setActiveNav('dashboard');setActiveGroup('pengkar');setOpenGroup('pengkar');setLoginPass('');
+          setIsLoggedIn(true);setActiveNav('dashboard');setActiveGroup('pengkar');setLoginPass('');
         } catch(error) {setLoginError(error.message);} finally {setBusy(false);}
       };
       const handleLogout = async () => {
@@ -215,7 +214,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         });
       };
       const navigateGroup=(group,view)=>{
-        setActiveGroup(group);setOpenGroup(group);setActiveNav(view);setSidebarOpen(false);
+        setActiveGroup(group);setActiveNav(view);setSidebarOpen(false);
         if(group!==activeGroup){
           setSearchNim('');setFilterYear('Semua Tahun');setFilterTw('Semua Triwulan');setFilterCategory('Semua Kategori');
           setEditingId(null);setParticipantRows([]);setSurveyRows([]);setImportedParticipantFile(null);setParticipantImportError('');setSurveyActivityId('');setNotice('');
@@ -438,14 +437,9 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
 
               {/* 4 MENU UTAMA */}
               <div className="p-4 space-y-1 text-xs">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block px-3 py-2">
-                  MENU NAVIGASI
-                </span>
-
-                {navigationGroups.map(group=><section key={group.id} aria-label={'Grup '+group.label} className="py-1">
-                  <button type="button" aria-expanded={openGroup===group.id} aria-controls={'nav-'+group.id} onClick={()=>setOpenGroup(openGroup===group.id?null:group.id)} className="w-full flex justify-between items-center px-3 py-3 font-bold text-slate-700"><span>{group.label}</span><span aria-hidden="true">{openGroup===group.id?'▾':'▸'}</span></button>
-                  {openGroup===group.id&&<div id={'nav-'+group.id} className="pl-3 space-y-1">{[{id:'dashboard',label:'Dashboard',icon:'📊'},{id:'laporan',label:'Laporan',icon:'📝'}].map(view=><button key={view.id} type="button" disabled={busy} aria-current={activeGroup===group.id&&activeNav===view.id?'page':undefined} onClick={()=>navigateGroup(group.id,view.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeGroup===group.id&&activeNav===view.id?'bg-[#fde8e8] text-[#D71920]':'text-slate-600 hover:bg-slate-50'}`}><span className="text-base">{view.icon}</span>{view.label}</button>)}</div>}
-                </section>)}
+                <label htmlFor="user-group" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block px-3 py-2">Grup Pengguna</label>
+                <select id="user-group" disabled={busy} value={activeGroup} onChange={event=>navigateGroup(event.target.value,'dashboard')} className="block w-full border border-slate-200 rounded-xl p-3 mb-3 bg-white font-bold text-slate-700">{navigationGroups.map(group=><option key={group.id} value={group.id}>{group.label}</option>)}</select>
+                <nav aria-label={'Menu '+groupLabel} className="space-y-1">{[{id:'dashboard',label:'Dashboard',icon:'📊'},{id:'laporan',label:'Laporan',icon:'📝'}].map(view=><button key={view.id} type="button" disabled={busy} aria-current={activeNav===view.id?'page':undefined} onClick={()=>navigateGroup(activeGroup,view.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeNav===view.id?'bg-[#fde8e8] text-[#D71920]':'text-slate-600 hover:bg-slate-50'}`}><span className="text-base">{view.icon}</span>{view.label}</button>)}</nav>
 
                 <button
                   disabled={!canManageAccounts} title={canManageAccounts?'':'Hanya Super Admin atau Operator KKA'} onClick={() => setActiveNav('pengaturanAdmin')}
@@ -722,7 +716,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {activeNav === 'laporan' && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
 
-                {!isOperator&&activeGroup==='pengkar'&&<MigrationPanel activities={scopedActivities} role={profileData.role} api={api} reload={load} pendingSurveys={pendingSurveys} pendingParticipants={pendingParticipants} />}
+                {!isOperator&&activeGroup==='pengkar'&&<MigrationPanel activities={activities} role={profileData.role} api={api} reload={load} pendingSurveys={pendingSurveys} pendingParticipants={pendingParticipants} />}
                 {isAdmin&&activeGroup==='pengkar'&&<StudentRecap mode="master" rows={masterStudents} activities={activities} />}
                 <div className="bg-white border rounded-2xl p-4 space-y-3 text-xs no-print"><h3 className="font-bold">Filter Laporan</h3><div className="flex flex-wrap gap-3"><input aria-label="Cari laporan" placeholder="NIM / nama kegiatan" value={searchNim} onChange={e=>setSearchNim(e.target.value)} className="border rounded-lg p-2"/><select aria-label="Tahun laporan" value={filterYear} onChange={e=>setFilterYear(e.target.value)} className="border rounded-lg p-2"><option>Semua Tahun</option>{years.map(y=><option key={y}>{y}</option>)}</select><select aria-label="Triwulan laporan" value={filterTw} onChange={e=>setFilterTw(e.target.value)} className="border rounded-lg p-2"><option>Semua Triwulan</option>{['TW1','TW2','TW3','TW4'].map(q=><option key={q}>{q}</option>)}</select><select aria-label="Kategori laporan" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)} className="border rounded-lg p-2"><option>Semua Kategori</option>{categories.map(c=><option key={c}>{c}</option>)}</select><button onClick={()=>{setSearchNim('');setFilterYear('Semua Tahun');setFilterTw('Semua Triwulan');setFilterCategory('Semua Kategori');}} className="border rounded-lg p-2">Reset Filter</button></div></div>
                 {/* FORM INPUT KEGIATAN 16 FIELD MASTER PERSIS GAMBAR LAMPIRAN */}
