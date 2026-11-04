@@ -72,10 +72,19 @@ def main():
                 page.locator('input[type=file]').nth(0).set_input_files(participant_template.value.path())
                 expect(page.get_by_text('1 peserta unik siap disimpan bersama kegiatan.',exact=True)).to_be_visible()
                 print('PASS: download and reimport XLSX participant template')
-                csv = b'Nama Lengkap,NIM,Program Studi,Fakultas,Asal Kampus\nPeserta Uji,123456789012,Informatika,FIF,Bandung\nPeserta Uji,123456789012,Informatika,FIF,Bandung\n'
+                csv = b'Nama Mahasiswa,NIM / NPM,Program Studi (Prodi),Nama Fakultas,Lokasi Kampus\nPeserta Uji,123456789012,Informatika,FIF,Bandung\nPeserta Uji,123456789012,Informatika,FIF,Bandung\n'
                 page.locator('input[type=file]').nth(0).set_input_files({'name':'peserta.csv','mimeType':'text/csv','buffer':csv})
                 expect(page.get_by_text('1 peserta unik siap disimpan bersama kegiatan.',exact=True)).to_be_visible()
                 expect(page.get_by_label('Jumlah Peserta',exact=True)).to_have_value('1')
+                preview=page.get_by_label('Pratinjau peserta kegiatan',exact=True)
+                expect(preview).to_contain_text('Peserta Uji')
+                expect(preview).to_contain_text('belum disimpan')
+                expect(preview).to_contain_text('1 baris NIM duplikat digabung')
+                invalid=b'Nama Mahasiswa,NIM\nPeserta Salah,BAD\n'
+                page.locator('input[type=file]').nth(0).set_input_files({'name':'salah.csv','mimeType':'text/csv','buffer':invalid})
+                expect(page.get_by_role('alert')).to_contain_text('Baris 2')
+                expect(preview).to_contain_text('Peserta Uji')
+                print('PASS: common header aliases, visible preview and error; invalid import preserves previous draft')
                 with page.expect_download() as survey_template:
                     page.get_by_role('button',name='Template Survey',exact=True).click()
                 page.locator('input[type=file]').nth(1).set_input_files(survey_template.value.path())
@@ -87,6 +96,19 @@ def main():
                 page.get_by_role('button',name='Simpan & Publikasikan Kegiatan').click()
                 expect(page.get_by_text('Kegiatan berhasil disimpan di server.',exact=True)).to_be_visible()
                 expect(page.locator('tbody tr').first).to_contain_text('Kegiatan Uji Browser')
+                recap=page.get_by_role('region',name='Rekap mahasiswa tersimpan',exact=True)
+                expect(recap).to_contain_text('Peserta Uji')
+                expect(recap).to_contain_text('123456789012')
+                expect(recap).to_contain_text('FIF')
+                expect(recap).to_contain_text('Kegiatan Uji Browser')
+                recap.get_by_label('Cari mahasiswa dalam rekap',exact=True).fill('not-found')
+                expect(recap).to_contain_text('Tidak ada mahasiswa yang cocok')
+                recap.get_by_label('Cari mahasiswa dalam rekap',exact=True).fill('123456789012')
+                expect(recap.locator('tbody tr')).to_have_count(1)
+                with page.expect_download() as student_export:
+                    recap.get_by_role('button',name='Ekspor Rekap Mahasiswa',exact=True).click()
+                assert student_export.value.suggested_filename=='Rekap_Mahasiswa_PKKM.xlsx'
+                print('PASS: saved student recap, name/NIM details, search and student Excel export')
                 print('PASS: import participant CSV deduplicates NIM, import survey, save activity')
                 with page.expect_download() as download:
                     page.get_by_role('button',name='Ekspor Excel',exact=True).click()
@@ -102,6 +124,7 @@ def main():
                 page.get_by_label('Triwulan',exact=True).select_option('TW1')
                 expect(page.get_by_text('Total Kegiatan',exact=True).locator('..')).to_contain_text('0')
                 page.get_by_role('button',name='Reset Filter',exact=True).click()
+                expect(page.get_by_role('region',name='Rekap mahasiswa tersimpan',exact=True)).to_contain_text('Peserta Uji')
                 page.screenshot(path=str(ARTIFACTS/'dashboard.png'),full_page=True)
                 print('PASS: reload retains data and real charts; search and quarter filters update metrics')
                 page.get_by_role('button',name='Laporan',exact=False).first.click()

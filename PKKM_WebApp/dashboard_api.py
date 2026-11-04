@@ -221,7 +221,10 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             c.execute('DELETE FROM activity_participants WHERE activity_id=?', (ident,))
             for student in participants.values():
                 c.execute('''INSERT INTO students VALUES(?,?,?,?,?) ON CONFLICT(nim) DO UPDATE SET
-                    nama=excluded.nama,prodi=excluded.prodi,fakultas=excluded.fakultas,kampus=excluded.kampus''',
+                    nama=excluded.nama,
+                    prodi=CASE WHEN excluded.prodi<>'' THEN excluded.prodi ELSE students.prodi END,
+                    fakultas=CASE WHEN excluded.fakultas<>'' THEN excluded.fakultas ELSE students.fakultas END,
+                    kampus=CASE WHEN excluded.kampus<>'' THEN excluded.kampus ELSE students.kampus END''',
                           (student.nim, student.nama, student.prodi, student.fakultas, student.kampus))
                 c.execute('INSERT INTO activity_participants VALUES(?,?)', (ident,student.nim))
             write_surveys(c, ident, data.surveys, user, data.catatanSurvey)

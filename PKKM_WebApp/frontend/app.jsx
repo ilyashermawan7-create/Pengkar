@@ -2,6 +2,8 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import Chart from 'chart.js/auto';
 import * as XLSX from 'xlsx';
+import {readSpreadsheet, readParticipants} from './spreadsheet.mjs';
+import StudentRecap from './StudentRecap.jsx';
 
     const { useState, useEffect, useRef } = React;
 
@@ -27,6 +29,7 @@ import * as XLSX from 'xlsx';
       const [notice, setNotice] = useState('');
       const [editingId, setEditingId] = useState(null);
       const [participantRows, setParticipantRows] = useState([]);
+      const [participantImportError, setParticipantImportError] = useState('');
       const [surveyRows, setSurveyRows] = useState([]);
       const [passwordForm, setPasswordForm] = useState({current_password:'',new_password:'',confirm:''});
       const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -143,32 +146,17 @@ import * as XLSX from 'xlsx';
         return students.find(s => String(s.nim).trim() === String(nim).trim());
       };
 
-      const readSpreadsheet = async (file) => {
-        if (file.size > 10*1024*1024) throw Error('Ukuran file maksimal 10 MB.');
-        const workbook=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true,dateNF:'yyyy-mm-dd',sheetRows:10012});
-        const sheet=workbook.Sheets[workbook.SheetNames[0]];
-        const rows=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:true});
-        const headerIndex=rows.findIndex((r,i)=>i<10&&r.some(x=>String(x).toLowerCase().includes('nim')));
-        if(headerIndex<0)throw Error('Kolom NIM tidak ditemukan. Gunakan template yang tersedia.');
-        const headers=rows[headerIndex].map(x=>String(x).trim().toLowerCase().replace(/[^a-z0-9]/g,''));
-        const data=rows.slice(headerIndex+1).filter(r=>r.some(x=>String(x).trim()));
-        if (!data.length || data.length>10000)throw Error('Berkas harus berisi 1–10.000 baris data.');
-        const get=(r,...names)=>{const i=headers.findIndex(h=>names.includes(h));return i<0?'':r[i] instanceof Date?r[i].toISOString().slice(0,10):String(r[i]??'').trim();};
-        return {data,get};
-      };
       const handleImportParticipantFile = async (e) => {
         const file=e.target.files[0];e.target.value='';if(!file)return;
+        setParticipantImportError('');
         await run(async()=>{
-          const {data,get}=await readSpreadsheet(file);
-          const parsed=data.map((row,index)=>{
-            const item={nama:get(row,'nama','namalengkap'),nim:get(row,'nim'),prodi:get(row,'prodi','programstudi'),fakultas:get(row,'fakultas'),kampus:get(row,'kampus','asalkampus','lokasi')};
-            if(!item.nama||!/^\d{6,30}$/.test(item.nim))throw Error('Baris '+(index+2)+': nama dan NIM (6–30 angka) wajib diisi.');
-            return item;
-          });
-          const unique=[...new Map(parsed.map(s=>[s.nim,s])).values()];
-          setParticipantRows(unique);setImportedParticipantFile({fileName:file.name,totalCount:unique.length,sampleNames:unique.slice(0,3).map(p=>p.nama).join(', ')});
-          setActivityForm(prev=>({...prev,jumlahPeserta:unique.length}));
-          setNotice(unique.length+' peserta unik siap disimpan bersama kegiatan.');
+          try {
+            const {students:unique,duplicateCount,sheetName}=await readParticipants(file);
+            setParticipantRows(unique);
+            setImportedParticipantFile({fileName:file.name,totalCount:unique.length,duplicateCount,sheetName});
+            setActivityForm(prev=>({...prev,jumlahPeserta:unique.length}));
+            setNotice(unique.length+' peserta unik siap disimpan bersama kegiatan.');
+          } catch(error) {setParticipantImportError(error.message);throw error;}
         });
       };
       const handleImportSurveys = async (e) => {
@@ -201,11 +189,11 @@ import * as XLSX from 'xlsx';
           await load();setSurveyRows([]);setNotice('Respons survei berhasil disimpan.');
         });
       };
-      const resetActivity = () => {setEditingId(null);setActivityForm({...freshForm(),...(profileData.role==='asrama'?{program:'Asrama',kategori:'Pengkar Asrama',urusan:'Asrama'}:{})});setParticipantRows([]);setSurveyRows([]);setImportedParticipantFile(null);};
+      const resetActivity = () => {setEditingId(null);setActivityForm({...freshForm(),...(profileData.role==='asrama'?{program:'Asrama',kategori:'Pengkar Asrama',urusan:'Asrama'}:{})});setParticipantRows([]);setSurveyRows([]);setImportedParticipantFile(null);setParticipantImportError('');};
       const editActivity = (act) => {
         setEditingId(act.id);setActivityForm({...freshForm(),...act,targetSurveyKepuasan:act.targetSurveyKepuasan??''});
         setParticipantRows(students.filter(s=>s.activityId===act.id));setSurveyRows(surveys.filter(s=>s.activityId===act.id));
-        setImportedParticipantFile(null);setActiveNav('laporan');window.scrollTo(0,0);
+        setImportedParticipantFile(null);setParticipantImportError('');setActiveNav('laporan');window.scrollTo(0,0);
       };
       const handleSaveActivity = async (e) => {
         e.preventDefault();await run(async()=>{
@@ -706,6 +694,7 @@ import * as XLSX from 'xlsx';
                   </div>
                 </div>
 
+              <StudentRecap rows={filteredStudents} activities={filteredActivities} />
               </main>
             )}
 
@@ -839,12 +828,15 @@ import * as XLSX from 'xlsx';
                           </div>
                         </div>
 
-                        {importedParticipantFile && (
-                          <div className="p-2.5 bg-white border border-blue-200 rounded-xl flex items-center justify-between text-xs text-blue-900">
-                            <span>✓ Berkas: <b>{importedParticipantFile.fileName}</b> ({importedParticipantFile.totalCount} Mahasiswa)</span>
-                            <span className="text-[11px] text-slate-500 italic truncate max-w-xs">{importedParticipantFile.sampleNames}...</span>
-                          </div>
-                        )}
+                        {participantImportError && <p role="alert" className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl">{participantImportError} Daftar peserta sebelumnya tetap dipertahankan.</p>}
+                        {participantRows.length>0 && <div aria-label="Pratinjau peserta kegiatan" className="p-3 bg-white border border-blue-200 rounded-xl space-y-2">
+                          <p className="font-bold text-blue-900">{participantRows.length} mahasiswa unik {importedParticipantFile?'berhasil dibaca — belum disimpan':'terlampir pada kegiatan ini'}.</p>
+                          {importedParticipantFile && <p className="text-blue-700">Berkas: {importedParticipantFile.fileName} · Sheet: {importedParticipantFile.sheetName}{importedParticipantFile.duplicateCount>0?` · ${importedParticipantFile.duplicateCount} baris NIM duplikat digabung`:''}.</p>}
+                          <p className="text-slate-600">Lengkapi nama dan tanggal kegiatan, lalu klik <b>Simpan &amp; Publikasikan Kegiatan</b>. Sesudah tersimpan, mahasiswa muncul pada Rekap Data Mahasiswa di bawah dan dashboard.</p>
+                          <div className="overflow-x-auto"><table className="w-full text-left"><thead><tr>{['NIM','Nama Mahasiswa','Program Studi','Fakultas','Kampus'].map(label=><th key={label} className="p-2">{label}</th>)}</tr></thead><tbody>{participantRows.slice(0,10).map(student=><tr key={student.nim} className="border-t"><td className="p-2 font-mono">{student.nim}</td><td className="p-2">{student.nama}</td><td className="p-2">{student.prodi||'—'}</td><td className="p-2">{student.fakultas||'—'}</td><td className="p-2">{student.kampus||'—'}</td></tr>)}</tbody></table></div>
+                          {participantRows.length>10 && <p className="text-slate-500">Pratinjau 10 dari {participantRows.length} mahasiswa. Semua peserta akan disimpan.</p>}
+                        </div>}
+                        {!participantRows.length && !participantImportError && <p className="text-blue-800">Belum ada daftar mahasiswa terlampir. Mengisi angka Jumlah Peserta saja tidak membuat rekap nama/NIM. Pilih berkas peserta untuk mengisi daftar.</p>}
                       </div>
 
                       {/* Baris 3: Unit Kerjasama, Urusan, Kategori, Jenis Kegiatan (Persis Foto) */}
@@ -1087,6 +1079,7 @@ import * as XLSX from 'xlsx';
                   </div>
                 </div>
 
+              <StudentRecap rows={filteredStudents} activities={filteredActivities} />
               </main>
             )}
 

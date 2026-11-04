@@ -65,6 +65,19 @@ Impor pada form masih berupa draft sampai kegiatan disimpan. Saat mengedit,
 berkas impor mengganti daftar peserta atau respons survei kegiatan itu.
 Mengedit kegiatan tanpa impor baru mempertahankan daftar sebelumnya.
 
+Pembaca peserta mengenali variasi kolom Nama Mahasiswa/Nama Lengkap,
+NIM/NPM, Program Studi/Prodi, Fakultas, dan Kampus. Sheet petunjuk dilewati;
+judul kolom dicari dalam 30 baris pertama setiap sheet. Pratinjau dan kesalahan
+impor ditampilkan di dekat tombol pemilih file. File yang tidak valid tidak
+mengganti daftar peserta yang sebelumnya sudah dipilih.
+
+Rekap Data Mahasiswa tersedia pada dashboard dan laporan setelah kegiatan
+disimpan. Rekap mengelompokkan NIM yang sama lintas kegiatan, mendukung
+pencarian dan ekspor Excel. Filter kegiatan juga berlaku pada rekap. Kolom
+prodi, fakultas, atau kampus yang kosong pada impor berikutnya tidak menghapus
+informasi master mahasiswa yang sudah diketahui. Angka Jumlah Peserta tanpa
+daftar NIM tetap merupakan jumlah kehadiran, bukan daftar mahasiswa.
+
 Skor survei wajib 1–5 pada keempat dimensi; skor kosong tidak diganti angka 5.
 Tanggal dan triwulan berasal dari tanggal kegiatan. Grafik, statistik,
 peserta unik berdasarkan NIM, dan ekspor mengikuti filter yang sama.
@@ -86,6 +99,12 @@ Instal dependensi uji terpisah bila belum tersedia:
 ```sh
 pip install httpx
 python -m unittest discover -s tests -v
+```
+
+Uji pembacaan spreadsheet dan variasi template:
+
+```sh
+npm run test:imports
 ```
 
 Untuk uji UI opsional, instal Playwright dan sediakan Chromium:

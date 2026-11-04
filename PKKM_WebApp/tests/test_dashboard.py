@@ -96,6 +96,19 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(response.status_code,422,response.text)
             self.assertEqual(self.snapshot()['activities'],[])
 
+    def test_reimport_without_optional_columns_preserves_student_details(self):
+        self.create(self.activity(participants=[{'nim':'123456789012','nama':'Peserta Uji',
+            'prodi':'Informatika','fakultas':'FIF','kampus':'Bandung'}]))
+        self.create(self.activity(namaKegiatan='Kegiatan kedua',participants=[{
+            'nim':'123456789012','nama':'Peserta Uji'}]))
+        data=self.snapshot()
+        self.assertEqual(len(data['students']),2)
+        self.assertEqual(len({row['nim'] for row in data['students']}),1)
+        for student in data['students']:
+            self.assertEqual(student['prodi'],'Informatika')
+            self.assertEqual(student['fakultas'],'FIF')
+            self.assertEqual(student['kampus'],'Bandung')
+
     def test_operator_and_program_access(self):
         _, operator = self.new_user('operator','operator')
         _, asrama = self.new_user('asrama','asrama')
