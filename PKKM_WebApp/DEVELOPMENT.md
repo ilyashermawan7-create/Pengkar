@@ -92,6 +92,16 @@ implementasi ini menggunakan pemeriksaan password server yang sebenarnya.
 Google/SSO tetap dinonaktifkan seperti referensi; OTP belum diaktifkan.
 Tidak ada sinkronisasi Looker Studio atau impor otomatis localStorage lama.
 
+## Cetak dan PDF
+
+Tombol Cetak / PDF mencetak dokumen terpisah dari `frontend/PrintReport.jsx`,
+bukan formulir atau halaman aplikasi. Dokumen berisi data kegiatan, rekap
+mahasiswa, dan respons survei sesuai filter laporan. Seluruh baris ikut
+dicetak, termasuk mahasiswa di luar batas 100 baris pratinjau layar.
+Format cetak adalah A4 landscape, dengan header tabel berulang saat berganti
+halaman. Pilih tujuan **Save as PDF / Simpan sebagai PDF** di dialog browser
+untuk mengunduh dokumen, atau pilih printer untuk mencetak ke kertas.
+
 ## Validasi
 
 Instal dependensi uji terpisah bila belum tersedia:
@@ -110,7 +120,7 @@ npm run test:imports
 Untuk uji UI opsional, instal Playwright dan sediakan Chromium:
 
 ```sh
-pip install playwright
+pip install playwright pypdf
 # Gunakan Chromium sistem melalui CHROMIUM_PATH bila tidak bernama chromium.
 python tests/browser_smoke.py
 ```

@@ -2,6 +2,7 @@
 Requires Playwright and Chromium; uses only a temporary database.
 """
 import os
+import io
 import secrets
 import shutil
 import signal
@@ -14,6 +15,7 @@ from pathlib import Path
 
 import httpx
 from playwright.sync_api import sync_playwright, expect
+from pypdf import PdfReader
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACTS = Path('/tmp/pkkm-browser-artifacts')
@@ -114,6 +116,53 @@ def main():
                     page.get_by_role('button',name='Ekspor Excel',exact=True).click()
                 assert download.value.suggested_filename=='Laporan_PKKM.xlsx'
                 print('PASS: Excel report download')
+                expect(page.locator('#pkkm-print-report')).to_be_hidden()
+                page.evaluate('() => { window.__printCalls=0; window.print=()=>{window.__printCalls+=1;}; }')
+                page.get_by_role('button',name='Cetak / PDF',exact=True).click()
+                page.wait_for_function('window.__printCalls >= 1',timeout=5000)
+                page.emulate_media(media='print')
+                expect(page.locator('#root')).to_be_hidden()
+                expect(page.locator('#pkkm-print-report')).to_be_visible()
+                pdf=page.pdf(path=str(ARTIFACTS/'laporan.pdf'),prefer_css_page_size=True,print_background=True)
+                reader=PdfReader(io.BytesIO(pdf))
+                text=' '.join(p.extract_text() for p in reader.pages)
+                for expected in ['Kegiatan Uji Browser','Peserta Uji','123456789012','Rekap Data Mahasiswa','Data Kegiatan']:
+                    assert expected in text, (expected,text)
+                for forbidden in ['Input Kegiatan Pengembangan','Simpan & Publikasikan','Pilih File Mahasiswa','Kegiatan berhasil disimpan','MENU NAVIGASI']:
+                    assert forbidden not in text, (forbidden,text)
+                assert len(reader.pages)<=2,len(reader.pages)
+                assert float(reader.pages[0].mediabox.width)>float(reader.pages[0].mediabox.height)
+                page.emulate_media(media='screen')
+                print('PASS: PDF contains report data in landscape, excludes application form/homepage')
+                page.get_by_label('Cari laporan',exact=True).fill('TidakAdaHasilPDF')
+                page.emulate_media(media='print')
+                empty_pdf=page.pdf(prefer_css_page_size=True)
+                empty_text=' '.join(p.extract_text() for p in PdfReader(io.BytesIO(empty_pdf)).pages)
+                assert 'Tidak ada kegiatan sesuai filter' in empty_text
+                assert 'Kegiatan Uji Browser' not in empty_text
+                assert 'Peserta Uji' not in empty_text
+                page.emulate_media(media='screen')
+                page.get_by_role('button',name='Reset Filter',exact=True).click()
+                print('PASS: PDF honors selected filters and excludes records outside results')
+                auth={'Authorization':'Bearer '+page.evaluate("sessionStorage.getItem('pkkm_token')")}
+                participants=[{'nim':str(900000000000+i),'nama':'Cetak'+str(i),'prodi':'Informatika','fakultas':'FIF','kampus':'Bandung'} for i in range(135)]
+                created=page.request.post(url+'/api/dashboard/activities',headers=auth,data={
+                    'namaKegiatan':'Kegiatan Banyak Peserta','tanggal':'2026-11-04','kategori':'Pengembangan Karakter',
+                    'jumlahPeserta':135,'participants':participants})
+                assert created.status==201,created.text()
+                created_id=created.json()['id']
+                page.reload()
+                expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
+                expect(page.get_by_text('Total Kegiatan',exact=True).locator('..')).to_contain_text('2')
+                page.emulate_media(media='print')
+                large_pdf=page.pdf(path=str(ARTIFACTS/'laporan-banyak-mahasiswa.pdf'),prefer_css_page_size=True)
+                large_text=' '.join(p.extract_text() for p in PdfReader(io.BytesIO(large_pdf)).pages)
+                assert 'Cetak0' in large_text and 'Cetak134' in large_text
+                assert '900000000134' in large_text
+                page.emulate_media(media='screen')
+                removed=page.request.delete(url+'/api/activities/'+str(created_id),headers=auth)
+                assert removed.status==200
+                print('PASS: multipage PDF includes all 135 participants beyond the screen preview limit')
                 page.reload()
                 expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
                 expect(page.get_by_text('Total Kegiatan',exact=True).locator('..')).to_contain_text('1')

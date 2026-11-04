@@ -7,9 +7,22 @@ body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 button:disabled { opacity: .55; cursor: not-allowed; }
+#pkkm-print-report { display: none; }
+@page { size: A4 landscape; margin: 12mm; }
 @media print {
-  aside, header, button, .no-print { display: none !important; }
-  main { padding: 0 !important; }
+  html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+  body > :not(#pkkm-print-report) { display: none !important; }
+  #pkkm-print-report { display: block !important; color: #111827; font-size: 9pt; line-height: 1.4; }
+  #pkkm-print-report h1 { font-size: 17pt; font-weight: 800; margin: 0 0 4pt; }
+  #pkkm-print-report h2 { font-size: 12pt; font-weight: 700; margin: 16pt 0 6pt; break-after: avoid; }
+  #pkkm-print-report p { margin: 4pt 0; }
+  #pkkm-print-report .report-heading { border-bottom: 2pt solid #991b1b; padding-bottom: 8pt; margin-bottom: 10pt; }
+  #pkkm-print-report .report-summary { font-weight: 700; margin: 10pt 0; }
+  #pkkm-print-report table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8pt; }
+  #pkkm-print-report thead { display: table-header-group; }
+  #pkkm-print-report tr { break-inside: avoid; }
+  #pkkm-print-report th, #pkkm-print-report td { border: 0.5pt solid #9ca3af; padding: 5pt; text-align: left; vertical-align: top; overflow-wrap: anywhere; white-space: pre-wrap; }
+  #pkkm-print-report th { font-weight: 700; background: #f3f4f6; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
 
 @font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 300; font-display: swap; src: url('/static/fonts/plus-jakarta-sans-latin-300-normal.woff2') format('woff2'); }

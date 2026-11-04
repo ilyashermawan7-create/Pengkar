@@ -4,6 +4,7 @@ import Chart from 'chart.js/auto';
 import * as XLSX from 'xlsx';
 import {readSpreadsheet, readParticipants} from './spreadsheet.mjs';
 import StudentRecap from './StudentRecap.jsx';
+import PrintReport from './PrintReport.jsx';
 
     const { useState, useEffect, useRef } = React;
 
@@ -400,6 +401,9 @@ import StudentRecap from './StudentRecap.jsx';
       // =========================================================================
       return (
         <div className="min-h-screen flex bg-[#f8f9fa] text-slate-800">
+          <PrintReport activities={filteredActivities} students={filteredStudents} surveys={filteredSurveys}
+            filters={{year:filterYear,quarter:filterTw,category:filterCategory,search:searchNim}}
+            preparedBy={profileData.nama} />
 
           {/* SIDEBAR KIRI */}
           <aside className={`${sidebarOpen ? "flex" : "hidden"} md:flex fixed inset-y-0 left-0 z-40 md:static w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 shadow-sm min-h-screen`}>
