@@ -214,7 +214,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         });
       };
       const navigateGroup=(group,view)=>{
-        setActiveGroup(group);setActiveNav(view);setSidebarOpen(false);
+        setActiveGroup(group);setActiveNav(group==='overview'?'dashboard':view);setSidebarOpen(false);
         if(group!==activeGroup){
           setSearchNim('');setFilterYear('Semua Tahun');setFilterTw('Semua Triwulan');setFilterCategory('Semua Kategori');
           setEditingId(null);setParticipantRows([]);setSurveyRows([]);setImportedParticipantFile(null);setParticipantImportError('');setSurveyActivityId('');setNotice('');
@@ -439,7 +439,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
               <div className="p-4 space-y-1 text-xs">
                 <label htmlFor="user-group" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block px-3 py-2">Grup Pengguna</label>
                 <select id="user-group" disabled={busy} value={activeGroup} onChange={event=>navigateGroup(event.target.value,'dashboard')} className="block w-full border border-slate-200 rounded-xl p-3 mb-3 bg-white font-bold text-slate-700">{navigationGroups.map(group=><option key={group.id} value={group.id}>{group.label}</option>)}</select>
-                <nav aria-label={'Menu '+groupLabel} className="space-y-1">{[{id:'dashboard',label:'Dashboard',icon:'📊'},{id:'laporan',label:'Laporan',icon:'📝'}].map(view=><button key={view.id} type="button" disabled={busy} aria-current={activeNav===view.id?'page':undefined} onClick={()=>navigateGroup(activeGroup,view.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeNav===view.id?'bg-[#fde8e8] text-[#D71920]':'text-slate-600 hover:bg-slate-50'}`}><span className="text-base">{view.icon}</span>{view.label}</button>)}</nav>
+                <nav aria-label={'Menu '+groupLabel} className="space-y-1">{[{id:'dashboard',label:'Dashboard',icon:'📊'},{id:'laporan',label:'Laporan',icon:'📝'}].filter(view=>activeGroup!=='overview'||view.id==='dashboard').map(view=><button key={view.id} type="button" disabled={busy} aria-current={activeNav===view.id?'page':undefined} onClick={()=>navigateGroup(activeGroup,view.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeNav===view.id?'bg-[#fde8e8] text-[#D71920]':'text-slate-600 hover:bg-slate-50'}`}><span className="text-base">{view.icon}</span>{view.label}</button>)}</nav>
 
                 <button
                   disabled={!canManageAccounts} title={canManageAccounts?'':'Hanya Super Admin atau Operator KKA'} onClick={() => setActiveNav('pengaturanAdmin')}
@@ -499,6 +499,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {/* ========================================================================= */}
             {activeNav === 'dashboard' && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
+                {activeGroup==='overview'&&<div className="bg-white border border-slate-200 rounded-2xl p-5"><h1 className="font-bold text-lg">Dashboard Keseluruhan</h1><p className="text-xs text-slate-500 mt-1">Gabungan kegiatan Pengembangan Karakter, PPKPT, dan Asrama beserta peserta dan surveinya, sesuai hak akses akun.</p></div>}
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
@@ -713,7 +714,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {/* ========================================================================= */}
             {/* 2. MENU: LAPORAN (INPUT DATA KEGIATAN PERSIS FOTO + IMPORT MAHASISWA & SURVEY) */}
             {/* ========================================================================= */}
-            {activeNav === 'laporan' && (
+            {activeNav === 'laporan' && activeGroup!=='overview' && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
 
                 {!isOperator&&activeGroup==='pengkar'&&<MigrationPanel activities={activities} role={profileData.role} api={api} reload={load} pendingSurveys={pendingSurveys} pendingParticipants={pendingParticipants} />}

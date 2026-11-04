@@ -228,3 +228,10 @@ kegiatan yang lolos filter grup. Survei selalu mengikuti kegiatan asalnya.
 Role dan pembatasan program backend tetap berlaku. Migrasi di Pengkar tetap
 menyediakan seluruh kegiatan yang boleh diakses agar migrasi data lama Asrama
 tetap dapat dilakukan. Grup baru disimpan melalui atribut navigationGroup.
+
+Dropdown Grup Pengguna juga menyediakan Dashboard (ID `overview`) dengan
+satu submenu Dashboard saja. Tampilan ini menggabungkan kegiatan Pengkar,
+PPKPT, dan Asrama yang dapat diakses akun, tanpa duplikasi. Grup PPK Tel-U
+tersendiri tidak ikut dihitung. Filter, peserta, grafik, dan survei mengikuti
+kumpulan ID gabungan tersebut. Overview hanya mode tampilan, bukan grup
+kegiatan baru yang disimpan di database; tidak ada formulir Laporan di sini.

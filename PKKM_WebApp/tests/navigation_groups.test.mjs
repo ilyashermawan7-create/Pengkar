@@ -16,3 +16,10 @@ test('legacy dorm activities are separated from character and PPKPT even with ol
 test('unknown programs are not automatically counted as character development',()=>{
  assert.deepEqual(groupActivities([{id:1,namaKegiatan:'Tidak terklasifikasi'}],'pengkar'),[]);
 });
+
+test('overall dashboard combines Pengkar, PPKPT and Asrama once, excluding the separate PPK Tel-U group',()=>{
+ const rows=[{id:1,program:'Pengembangan Karakter'},{id:2,kategori:'PPKPT'},
+ {id:3,program:'Asrama',kategori:'PPKPT'},{id:4,navigationGroup:'asrama'},
+ {id:5,navigationGroup:'ppk-telu',program:'Pengembangan Karakter'},{id:6,namaKegiatan:'Tidak diketahui'}];
+ assert.deepEqual(groupActivities(rows,'overview').map(row=>row.id),[1,2,3,4]);
+});
