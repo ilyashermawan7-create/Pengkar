@@ -126,6 +126,27 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(student['fakultas'],'FIF')
             self.assertEqual(student['kampus'],'Bandung')
 
+    def test_navigation_groups_preserve_legacy_data_and_round_trip(self):
+        import json
+        legacy=self.create()
+        with server.connect() as c:
+            record=c.execute('SELECT payload FROM activity_details WHERE activity_id=?',(legacy,)).fetchone()
+            payload=json.loads(record['payload']);payload.pop('navigationGroup',None)
+            c.execute('UPDATE activity_details SET payload=? WHERE activity_id=?',(json.dumps(payload),legacy))
+        asrama=self.create(self.activity(namaKegiatan='Grup Asrama',program='Asrama',navigationGroup='asrama'))
+        ppk=self.create(self.activity(namaKegiatan='Grup PPK Tel-U',navigationGroup='ppk-telu'))
+        records={row['id']:row for row in self.snapshot()['activities']}
+        self.assertEqual(records[legacy]['navigationGroup'],'pengkar')
+        self.assertEqual(records[asrama]['navigationGroup'],'asrama')
+        self.assertEqual(records[ppk]['navigationGroup'],'ppk-telu')
+        response=self.client.put('/api/dashboard/activities/'+str(ppk),headers=self.headers,json=self.activity(navigationGroup='ppk-telu',namaKegiatan='PPK edited'))
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(next(row for row in self.snapshot()['activities'] if row['id']==ppk)['navigationGroup'],'ppk-telu')
+        response=self.client.post('/api/dashboard/activities',headers=self.headers,json=self.activity(navigationGroup='invalid'))
+        self.assertEqual(response.status_code,422)
+        _,scoped=self.new_user('groupasrama','asrama')
+        self.assertEqual([row['id'] for row in self.snapshot(scoped)['activities']],[asrama])
+
     def test_operator_and_program_access(self):
         _, operator = self.new_user('operator','operator')
         _, asrama = self.new_user('asrama','asrama')

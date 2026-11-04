@@ -210,3 +210,17 @@ hanya dapat membuat atau menonaktifkan `pengkar`, `asrama`, dan `viewer`;
 daftar akun yang diterima juga dibatasi ke tiga role tersebut. Pembuatan dan
 penonaktifan admin, operator lain, maupun verifier ditolak server. Hak penuh
 Super Admin dan pembatasan program Operator Pengkar/Asrama tetap berlaku.
+
+## Grup navigasi
+
+Sidebar memiliki grup Pengkar, Asrama, dan PPK Tel-U, masing-masing dengan
+Dashboard dan Laporan. Pengaturan Admin dan Pengaturan tetap di luar grup.
+Setiap kegiatan menyimpan `navigationGroup` (`pengkar`, `asrama`, `ppk-telu`)
+di activity_details. Record lama tanpa atribut tersebut tetap tampil sebagai
+Pengkar, terlepas dari kategori/program lama; tidak ada pemindahan data massal.
+PPK Tel-U adalah grup tersendiri dan tidak disamakan otomatis dengan PPKPT.
+
+Filter, metrik, grafik, rekap peserta, survei, dan ekspor mengikuti grup aktif.
+Form menandai kegiatan baru dengan grup aktif; pergantian grup mereset filter
+dan draft form. Hak akses program yang sudah ada tetap diperiksa backend.
+Migrasi lama dan master mahasiswa tetap tersedia di Pengkar sesuai role.

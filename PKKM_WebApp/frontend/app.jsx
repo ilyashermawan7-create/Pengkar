@@ -9,6 +9,7 @@ import {downloadReportPdf} from './reportPdf.mjs';
 import MigrationPanel from './MigrationPanel.jsx';
 import SurveySummary from './SurveySummary.jsx';
 import surveySchema from '../survey_schema.json';
+import {navigationGroups,groupActivities} from './navigationGroups.mjs';
 import {average} from './statistics.mjs';
 import {calculateCsi,csiMethod} from './csi.mjs';
 import {dashboardMetrics,activityGroup,activityGroupLabels} from './dashboardMetrics.mjs';
@@ -28,6 +29,9 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
 
       // 4 Menu Utama: 'dashboard' | 'laporan' | 'pengaturanAdmin' | 'pengaturan'
       const [activeNav, setActiveNav] = useState('dashboard');
+      const [activeGroup,setActiveGroup]=useState('pengkar');
+      const [openGroup,setOpenGroup]=useState('pengkar');
+      const groupLabel=navigationGroups.find(group=>group.id===activeGroup).label;
 
       const [students, setStudents] = useState([]);
       const [masterStudents,setMasterStudents]=useState([]);
@@ -81,9 +85,9 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
 
       const freshForm = () => {
         const date = new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Jakarta'});
-        return {namaKegiatan:'',tanggal:date,tahun:date.slice(0,4),triwulan:'TW'+(Math.floor((Number(date.slice(5,7))-1)/3)+1),
-          program:'Pengembangan Karakter',jumlahPeserta:'',linkEvident:'',tempat:'',unitKerjasama:'',urusan:'Pengembangan karakter',
-          kategori:'Pengembangan Karakter',jenis:'Pengembangan Karakter',pembicara:'',honor:'',takPanitia:10,takPeserta:5,laporan:'',
+        return {navigationGroup:activeGroup,namaKegiatan:'',tanggal:date,tahun:date.slice(0,4),triwulan:'TW'+(Math.floor((Number(date.slice(5,7))-1)/3)+1),
+          program:activeGroup==='asrama'?'Asrama':'Pengembangan Karakter',jumlahPeserta:'',linkEvident:'',tempat:'',unitKerjasama:'',urusan:activeGroup==='asrama'?'Asrama':activeGroup==='ppk-telu'?'PPK Tel-U':'Pengembangan karakter',
+          kategori:activeGroup==='asrama'?'Pengkar Asrama':activeGroup==='ppk-telu'?'PPK Tel-U':'Pengembangan Karakter',jenis:activeGroup==='pengkar'?'Pengembangan Karakter':groupLabel,pembicara:'',honor:'',takPanitia:10,takPeserta:5,laporan:'',
           targetSurveyKepuasan:'',evaluasiMateri:'',evaluasiNarasumber:'',evaluasiFasilitas:'',evaluasiDampak:'',catatanSurvey:''};
       };
       const [activityForm, setActivityForm] = useState(freshForm);
@@ -108,15 +112,16 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         if (!token) return;
         load(token).then(()=>setIsLoggedIn(true)).catch(error=>setLoginError(error.message));
       }, []);
-      useEffect(()=>{if(!editingId)setActivityForm({...freshForm(),...(profileData.role==='asrama'?{program:'Asrama',kategori:'Pengkar Asrama',urusan:'Asrama'}:{})});},[profileData.role]);
-      const filteredActivities = activities.filter(act => {
+      useEffect(()=>{if(!editingId)setActivityForm({...freshForm(),...(profileData.role==='asrama'?{program:'Asrama',kategori:'Pengkar Asrama',urusan:'Asrama'}:{})});},[profileData.role,activeGroup]);
+      const scopedActivities=groupActivities(activities,activeGroup);
+      const filteredActivities = scopedActivities.filter(act => {
         const query=searchNim.trim().toLowerCase();
         return (!query || act.namaKegiatan.toLowerCase().includes(query) || students.some(s=>s.activityId===act.id && (s.nim.includes(query)||s.nama.toLowerCase().includes(query))))
           && (filterYear==='Semua Tahun'||act.tahun===filterYear)
           && (filterTw==='Semua Triwulan'||act.triwulan===filterTw)
           && (filterCategory==='Semua Kategori'||act.kategori===filterCategory);
       });
-      useEffect(()=>{setActivityPage(1);},[searchNim,filterYear,filterTw,filterCategory,activities.length]);
+      useEffect(()=>{setActivityPage(1);},[searchNim,filterYear,filterTw,filterCategory,activities.length,activeGroup]);
       const activityLimit=activityPageSize==='all'?Math.max(1,filteredActivities.length):Number(activityPageSize);
       const activityPages=Math.max(1,Math.ceil(filteredActivities.length/activityLimit));
       const currentActivityPage=Math.min(activityPage,activityPages);
@@ -125,8 +130,8 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const visibleIds = new Set(filteredActivities.map(a=>a.id));
       const filteredStudents=students.filter(s=>visibleIds.has(s.activityId));
       const filteredSurveys=surveys.filter(s=>visibleIds.has(s.activityId));
-      const years=[...new Set([...activities.map(a=>a.tahun).filter(Boolean),String(new Date().getFullYear())])].sort().reverse();
-      const categories=[...new Set(['Pengembangan Karakter','Pengkar Asrama','Wawasan Kebangsaan','Konseling','Kesehatan Mental','PPKPT',...activities.map(a=>a.kategori)])];
+      const years=[...new Set([...scopedActivities.map(a=>a.tahun).filter(Boolean),String(new Date().getFullYear())])].sort().reverse();
+      const categories=[...new Set(['Pengembangan Karakter','Pengkar Asrama','Wawasan Kebangsaan','Konseling','Kesehatan Mental','PPKPT',...scopedActivities.map(a=>a.kategori)])];
       const mean = average;
       const csi=calculateCsi(filteredSurveys);
       const surveyMetrics=csi.groups.map(group=>({label:group.label,divisor:group.divisor,val:group.percent===null?'—':group.percent.toFixed(1)+'%',skor:group.score===null?'—':group.score.toFixed(2),status:group.status}));
@@ -146,13 +151,13 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         if (pieChartRef.current) pieInstance.current=new Chart(pieChartRef.current,{type:'pie',data:{labels,datasets:[{data:labels.map(label=>filteredActivities.filter(a=>a.kategori===label).length),backgroundColor:palette,borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{position:'right',labels:{boxWidth:10,font:{size:9}}}}}});
         if (barChartRef.current) barInstance.current=new Chart(barChartRef.current,{type:'bar',data:{labels:chartYears,datasets:labels.map((label,index)=>({label,data:chartYears.map(year=>filteredActivities.filter(a=>(a.tahun||'Belum diisi')===year&&a.kategori===label).length),backgroundColor:palette[index%palette.length]}))},options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{y:{beginAtZero:true,ticks:{precision:0}},x:{grid:{display:false}}},plugins:{legend:{position:'top',labels:{boxWidth:10,font:{size:10}}}}}});
         return ()=>{pieInstance.current?.destroy();barInstance.current?.destroy();};
-      }, [isLoggedIn,activeNav,activities,students,searchNim,filterYear,filterTw,filterCategory]);
+      }, [isLoggedIn,activeNav,activeGroup,activities,students,searchNim,filterYear,filterTw,filterCategory]);
       const handleInitialLogin = async (e) => {
         e.preventDefault();setLoginError('');setBusy(true);
         try {
           const result=await api('/login',{method:'POST',body:JSON.stringify({username:loginUser,password:loginPass})},'');
           await load(result.token);sessionStorage.setItem('pkkm_token',result.token);setToken(result.token);
-          setIsLoggedIn(true);setActiveNav('dashboard');setLoginPass('');
+          setIsLoggedIn(true);setActiveNav('dashboard');setActiveGroup('pengkar');setOpenGroup('pengkar');setLoginPass('');
         } catch(error) {setLoginError(error.message);} finally {setBusy(false);}
       };
       const handleLogout = async () => {
@@ -208,6 +213,13 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
           await api('/dashboard/activities/'+surveyActivityId+'/surveys',{method:'PUT',body:JSON.stringify(surveyRows)});
           await load();setSurveyRows([]);setNotice('Respons survei berhasil disimpan.');
         });
+      };
+      const navigateGroup=(group,view)=>{
+        setActiveGroup(group);setOpenGroup(group);setActiveNav(view);setSidebarOpen(false);
+        if(group!==activeGroup){
+          setSearchNim('');setFilterYear('Semua Tahun');setFilterTw('Semua Triwulan');setFilterCategory('Semua Kategori');
+          setEditingId(null);setParticipantRows([]);setSurveyRows([]);setImportedParticipantFile(null);setParticipantImportError('');setSurveyActivityId('');setNotice('');
+        }
       };
       const resetActivity = () => {setEditingId(null);setActivityForm({...freshForm(),...(profileData.role==='asrama'?{program:'Asrama',kategori:'Pengkar Asrama',urusan:'Asrama'}:{})});setParticipantRows([]);setSurveyRows([]);setImportedParticipantFile(null);setParticipantImportError('');};
       const editActivity = (act) => {
@@ -413,7 +425,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       return (
         <div className="min-h-screen flex bg-[#f8f9fa] text-slate-800">
           <PrintReport activities={filteredActivities} students={filteredStudents} surveys={filteredSurveys}
-            filters={{year:filterYear,quarter:filterTw,category:filterCategory,search:searchNim}}
+            filters={{year:filterYear,quarter:filterTw,category:groupLabel+' / '+filterCategory,search:searchNim}}
             preparedBy={profileData.nama} />
 
           {/* SIDEBAR KIRI */}
@@ -430,19 +442,10 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                   MENU NAVIGASI
                 </span>
 
-                <button
-                  onClick={() => {setActiveNav('dashboard');setSidebarOpen(false);}}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeNav === 'dashboard' ? 'bg-[#fde8e8] text-[#D71920]' : 'text-slate-600 hover:bg-slate-50'}`}
-                >
-                  <span className="text-base">📊</span> Dashboard
-                </button>
-
-                <button
-                  onClick={() => {setActiveNav('laporan');setSidebarOpen(false);}}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeNav === 'laporan' ? 'bg-[#fde8e8] text-[#D71920]' : 'text-slate-600 hover:bg-slate-50'}`}
-                >
-                  <span className="text-base">📝</span> Laporan
-                </button>
+                {navigationGroups.map(group=><section key={group.id} aria-label={'Grup '+group.label} className="py-1">
+                  <button type="button" aria-expanded={openGroup===group.id} aria-controls={'nav-'+group.id} onClick={()=>setOpenGroup(openGroup===group.id?null:group.id)} className="w-full flex justify-between items-center px-3 py-3 font-bold text-slate-700"><span>{group.label}</span><span aria-hidden="true">{openGroup===group.id?'▾':'▸'}</span></button>
+                  {openGroup===group.id&&<div id={'nav-'+group.id} className="pl-3 space-y-1">{[{id:'dashboard',label:'Dashboard',icon:'📊'},{id:'laporan',label:'Laporan',icon:'📝'}].map(view=><button key={view.id} type="button" disabled={busy} aria-current={activeGroup===group.id&&activeNav===view.id?'page':undefined} onClick={()=>navigateGroup(group.id,view.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeGroup===group.id&&activeNav===view.id?'bg-[#fde8e8] text-[#D71920]':'text-slate-600 hover:bg-slate-50'}`}><span className="text-base">{view.icon}</span>{view.label}</button>)}</div>}
+                </section>)}
 
                 <button
                   disabled={!canManageAccounts} title={canManageAccounts?'':'Hanya Super Admin atau Operator KKA'} onClick={() => setActiveNav('pengaturanAdmin')}
@@ -479,7 +482,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
               <div className="flex items-center gap-4">
                 <button aria-label="Buka menu" onClick={()=>setSidebarOpen(!sidebarOpen)} className="text-slate-500 hover:text-slate-700 text-lg">☰</button>
                 <div className="text-xs text-slate-400 font-medium">
-                  <span className="hover:text-slate-600 cursor-pointer">Dit. KKA</span> &gt; <span className="text-slate-800 font-bold uppercase">{activeNav}</span>
+                  <span className="hover:text-slate-600 cursor-pointer">Dit. KKA</span> &gt; {['dashboard','laporan'].includes(activeNav)&&<><span>{groupLabel}</span> &gt; </>}<span className="text-slate-800 font-bold uppercase">{activeNav}</span>
                 </div>
               </div>
 
@@ -719,21 +722,21 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {activeNav === 'laporan' && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
 
-                {!isOperator&&<MigrationPanel activities={activities} role={profileData.role} api={api} reload={load} pendingSurveys={pendingSurveys} pendingParticipants={pendingParticipants} />}
-                {isAdmin&&<StudentRecap mode="master" rows={masterStudents} activities={activities} />}
+                {!isOperator&&activeGroup==='pengkar'&&<MigrationPanel activities={scopedActivities} role={profileData.role} api={api} reload={load} pendingSurveys={pendingSurveys} pendingParticipants={pendingParticipants} />}
+                {isAdmin&&activeGroup==='pengkar'&&<StudentRecap mode="master" rows={masterStudents} activities={activities} />}
                 <div className="bg-white border rounded-2xl p-4 space-y-3 text-xs no-print"><h3 className="font-bold">Filter Laporan</h3><div className="flex flex-wrap gap-3"><input aria-label="Cari laporan" placeholder="NIM / nama kegiatan" value={searchNim} onChange={e=>setSearchNim(e.target.value)} className="border rounded-lg p-2"/><select aria-label="Tahun laporan" value={filterYear} onChange={e=>setFilterYear(e.target.value)} className="border rounded-lg p-2"><option>Semua Tahun</option>{years.map(y=><option key={y}>{y}</option>)}</select><select aria-label="Triwulan laporan" value={filterTw} onChange={e=>setFilterTw(e.target.value)} className="border rounded-lg p-2"><option>Semua Triwulan</option>{['TW1','TW2','TW3','TW4'].map(q=><option key={q}>{q}</option>)}</select><select aria-label="Kategori laporan" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)} className="border rounded-lg p-2"><option>Semua Kategori</option>{categories.map(c=><option key={c}>{c}</option>)}</select><button onClick={()=>{setSearchNim('');setFilterYear('Semua Tahun');setFilterTw('Semua Triwulan');setFilterCategory('Semua Kategori');}} className="border rounded-lg p-2">Reset Filter</button></div></div>
                 {/* FORM INPUT KEGIATAN 16 FIELD MASTER PERSIS GAMBAR LAMPIRAN */}
                 <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
                   <div>
                     <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-                      Input Kegiatan Pengembangan Karakter (16 Field Master)
+                      {activeGroup==='pengkar'?'Input Kegiatan Pengembangan Karakter (16 Field Master)':'Input Kegiatan '+groupLabel}
                     </h2>
                     <p className="text-xs text-slate-500 mt-1">
                       Data tersimpan di server dan otomatis tampil pada dashboard bersama.
                     </p>
                   </div>
 
-                  {profileData.role==='verifier' && <section className="p-5 bg-amber-50 border border-amber-200 rounded-2xl space-y-3 text-xs"><h3 className="font-bold">Verifikasi / Impor Respons Survei</h3><label className="block">Kegiatan<select aria-label="Kegiatan survei" value={surveyActivityId} onChange={e=>{setSurveyActivityId(e.target.value);setSurveyRows([]);}} className="block w-full border rounded-xl p-3 mt-1"><option value="">Pilih kegiatan</option>{activities.map(a=><option key={a.id} value={a.id}>{a.namaKegiatan}</option>)}</select></label><input aria-label="Berkas survei verifikator" type="file" accept=".xlsx,.xls,.csv" onChange={handleImportSurveys} disabled={busy||!surveyActivityId}/><p>{surveyRows.length} respons siap disimpan.</p><button type="button" aria-label="Template Survey" title="20 pertanyaan asli. Lengkapi skor 1–5 sebelum mengimpor." onClick={downloadSurveyTemplate} className="border bg-white rounded-xl p-2 mr-2">Template Survey</button><button type="button" disabled={busy||!surveyRows.length} onClick={saveSurveyImport} className="bg-amber-600 text-white rounded-xl p-2">Simpan Respons Survei</button></section>}
+                  {profileData.role==='verifier' && <section className="p-5 bg-amber-50 border border-amber-200 rounded-2xl space-y-3 text-xs"><h3 className="font-bold">Verifikasi / Impor Respons Survei</h3><label className="block">Kegiatan<select aria-label="Kegiatan survei" value={surveyActivityId} onChange={e=>{setSurveyActivityId(e.target.value);setSurveyRows([]);}} className="block w-full border rounded-xl p-3 mt-1"><option value="">Pilih kegiatan</option>{scopedActivities.map(a=><option key={a.id} value={a.id}>{a.namaKegiatan}</option>)}</select></label><input aria-label="Berkas survei verifikator" type="file" accept=".xlsx,.xls,.csv" onChange={handleImportSurveys} disabled={busy||!surveyActivityId}/><p>{surveyRows.length} respons siap disimpan.</p><button type="button" aria-label="Template Survey" title="20 pertanyaan asli. Lengkapi skor 1–5 sebelum mengimpor." onClick={downloadSurveyTemplate} className="border bg-white rounded-xl p-2 mr-2">Template Survey</button><button type="button" disabled={busy||!surveyRows.length} onClick={saveSurveyImport} className="bg-amber-600 text-white rounded-xl p-2">Simpan Respons Survei</button></section>}
                   {!canWrite && <p className="text-sm text-slate-500">Akun ini dapat membaca laporan. Input kegiatan tersedia untuk operator dan administrator.</p>}
                   {canWrite && <form onSubmit={handleSaveActivity} className="space-y-6 text-xs">
                     {editingId && <div className="p-3 bg-blue-50 text-blue-900 rounded-xl">Mengedit kegiatan #{editingId}. <button type="button" onClick={resetActivity}>Batalkan edit</button></div>}
@@ -1061,7 +1064,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                 {/* TABEL KEGIATAN TERDATA */}
                 <div role="region" aria-label="Daftar kegiatan tersimpan" className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-6 space-y-4">
                   <h3 className="font-bold text-sm text-slate-900">Daftar Kegiatan Terpublikasi ({filteredActivities.length})</h3>
-                  <div className="flex gap-2"><button onClick={exportActivities} className="border rounded-lg px-3 py-2 text-xs">Ekspor Excel</button><button disabled={busy} onClick={()=>run(()=>downloadReportPdf({activities:filteredActivities,students:filteredStudents,surveys:filteredSurveys,filters:{year:filterYear,quarter:filterTw,category:filterCategory,search:searchNim},preparedBy:profileData.nama}))} className="border rounded-lg px-3 py-2 text-xs">Unduh PDF</button></div>
+                  <div className="flex gap-2"><button onClick={exportActivities} className="border rounded-lg px-3 py-2 text-xs">Ekspor Excel</button><button disabled={busy} onClick={()=>run(()=>downloadReportPdf({activities:filteredActivities,students:filteredStudents,surveys:filteredSurveys,filters:{year:filterYear,quarter:filterTw,category:groupLabel+' / '+filterCategory,search:searchNim},preparedBy:profileData.nama}))} className="border rounded-lg px-3 py-2 text-xs">Unduh PDF</button></div>
                   <p className="text-xs text-slate-500">PDF diunduh langsung dan memuat seluruh data sesuai filter laporan, tanpa formulir aplikasi.</p>
                   <label className="text-xs block">Tampilkan kegiatan<select aria-label="Jumlah kegiatan per halaman" value={activityPageSize} onChange={event=>{setActivityPageSize(event.target.value);setActivityPage(1);}} className="border rounded-lg p-2 ml-2"><option value="10">10</option><option value="50">50</option><option value="all">Semua (All)</option></select></label>
                   <div className="overflow-x-auto custom-scrollbar">

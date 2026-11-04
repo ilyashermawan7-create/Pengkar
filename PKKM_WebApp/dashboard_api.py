@@ -145,6 +145,7 @@ class Survey(Input):
 
 
 class DashboardActivity(Input):
+    navigationGroup: Literal['pengkar','asrama','ppk-telu'] = 'pengkar'
     namaKegiatan: str = Field(default='', max_length=200)
     tanggal: datetime.date | None = None
     tahun: str = Field(default='',pattern=r'^(\d{4})?$',max_length=4)
@@ -281,9 +282,10 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
                       evaluasiMateri='', evaluasiNarasumber='', evaluasiFasilitas='', evaluasiDampak='', catatanSurvey='')
         extras = details.get(data['id'], {})
         for key in ('jenis','honor','takPanitia','takPeserta','targetSurveyKepuasan','evaluasiMateri',
-                    'evaluasiNarasumber','evaluasiFasilitas','evaluasiDampak','catatanSurvey','urusan','jumlahPeserta','sourceKey'):
+                    'evaluasiNarasumber','evaluasiFasilitas','evaluasiDampak','catatanSurvey','urusan','jumlahPeserta','sourceKey','navigationGroup'):
             if key in extras:
                 result[key] = extras[key]
+        result.setdefault('navigationGroup','pengkar')
         result.update(id=data['id'], tahun=str(date.year) if date else extras.get('tahun',''), triwulan=f'TW{(date.month-1)//3+1}' if date else '')
         full = [r for r in responses if r.get('answers') is not None]
         scores = [r.get('skorTotal') for r in (full or responses) if r.get('skorTotal') is not None]
