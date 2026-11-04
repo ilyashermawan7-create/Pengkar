@@ -140,6 +140,29 @@ class DashboardTests(unittest.TestCase):
             'username':'escalate','nama':'Bad User','role':'admin','password':'Test-password-only-2026'})
         self.assertEqual(response.status_code,403)
 
+    def test_operator_can_manage_only_delegated_account_roles(self):
+        operator_id,operator=self.new_user('restrictedoperator','operator')
+        for role in ('pengkar','asrama','viewer'):
+            response=self.client.post('/api/dashboard/users',headers=operator,json={'username':'delegated'+role,'nama':'Delegate','role':role,'password':'Test-password-only-2026'})
+            self.assertEqual(response.status_code,201,response.text)
+            self.assertEqual(self.client.delete('/api/dashboard/users/'+str(response.json()['id']),headers=operator).status_code,200)
+        for role in ('admin','operator','verifier'):
+            response=self.client.post('/api/dashboard/users',headers=operator,json={'username':'forbidden'+role,'nama':'Forbidden','role':role,'password':'Test-password-only-2026'})
+            self.assertEqual(response.status_code,403)
+        protected_id,_=self.new_user('protectedoperator','operator')
+        verifier_id,_=self.new_user('protectedverifier','verifier')
+        for ident in (1,operator_id,protected_id,verifier_id):
+            self.assertEqual(self.client.delete('/api/dashboard/users/'+str(ident),headers=operator).status_code,403)
+        snapshot=self.snapshot(operator)
+        self.assertTrue(all(row['role'] in ('pengkar','asrama','viewer') for row in snapshot['adminList']))
+        self.assertEqual(snapshot['masterStudents'],[])
+
+    def test_operator_cannot_bypass_hidden_migration_menu(self):
+        _,operator=self.new_user('nomigration','operator')
+        for endpoint in ('students','activities','participants','surveys','participants/pending/auto-connect','surveys/pending/auto-connect'):
+            response=self.client.post('/api/migrate/'+endpoint,headers=operator,json={'items':[]})
+            self.assertEqual(response.status_code,403,response.text)
+
     def test_verifier_can_only_change_surveys_and_viewer_is_read_only(self):
         ident = self.create()
         _, verifier = self.new_user('verifier','verifier')

@@ -196,3 +196,17 @@ Metrics dan pertimbangkan pagination server atau kapasitas RAM lebih besar.
 Uji sintetis 75.000 baris mahasiswa: alokasi puncak tambahan proses encoding
 JSON turun dari sekitar 40,56 MiB menjadi 0,57 MiB (tracemalloc; di luar memori
 data awal dan proses server). Angka ini bukan pengukuran RAM produksi.
+
+## Batas Operator KKA
+
+Role `operator` pada Laporan menampilkan input kegiatan, daftar kegiatan
+terpublikasi, dan rekap mahasiswa. Panel migrasi, master mahasiswa, serta
+analisis survei terpisah disembunyikan. Filter dan ekspor daftar tetap tersedia.
+Backend menolak semua endpoint `/api/migrate/*` untuk role ini dan tidak
+mengirim master mahasiswa pada snapshot Operator KKA.
+
+Pengaturan Admin tersedia bagi Super Admin dan Operator KKA. Operator KKA
+hanya dapat membuat atau menonaktifkan `pengkar`, `asrama`, dan `viewer`;
+daftar akun yang diterima juga dibatasi ke tiga role tersebut. Pembuatan dan
+penonaktifan admin, operator lain, maupun verifier ditolak server. Hak penuh
+Super Admin dan pembatasan program Operator Pengkar/Asrama tetap berlaku.

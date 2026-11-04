@@ -231,7 +231,8 @@ def main():
                 page.get_by_label('Username Admin *',exact=True).fill('operatoruji')
                 page.get_by_label('Email Resmi Tel-U *',exact=True).fill('operator@example.test')
                 page.get_by_label('Nama Lengkap Petugas *',exact=True).fill('Operator Uji')
-                page.get_by_label('Password awal (minimal 12 karakter) *',exact=True).fill(secrets.token_urlsafe(24))
+                operator_password=secrets.token_urlsafe(24)
+                page.get_by_label('Password awal (minimal 12 karakter) *',exact=True).fill(operator_password)
                 page.get_by_role('button',name='+ Buatkan Akun Admin',exact=True).click()
                 expect(page.get_by_text('Akun baru berhasil dibuat dan dapat digunakan untuk login.',exact=True)).to_be_visible()
                 expect(page.locator('tbody tr').filter(has_text='operatoruji')).to_contain_text('Operator KKA')
@@ -587,6 +588,23 @@ def main():
                 assert len(stored)==1573
                 assert stored[0]['answers']==[None,5]+[None]*18 and stored[0]['saran']=='Saran asli'
                 print('PASS: auto-connect 1574 surveys across batches, skip duplicates, preserve original partial answers')
+                page.get_by_role('button',name='Log Out',exact=False).click()
+                page.get_by_label('Username',exact=True).fill('operatoruji')
+                page.get_by_label('Password',exact=True).fill(operator_password)
+                page.get_by_role('button',name='Login',exact=True).click()
+                expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
+                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                expect(page.get_by_role('region',name='Migrasi data kegiatan dan survei',exact=True)).to_have_count(0)
+                expect(page.get_by_role('region',name='Survei kepuasan 20 pertanyaan',exact=True)).to_have_count(0)
+                expect(page.get_by_text('Input Kegiatan Pengembangan Karakter (16 Field Master)',exact=True)).to_be_visible()
+                expect(page.get_by_role('region',name='Daftar kegiatan tersimpan',exact=True)).to_be_visible()
+                expect(page.get_by_role('region',name='Rekap mahasiswa tersimpan',exact=True)).to_be_visible()
+                page.get_by_role('button',name='Pengaturan Admin',exact=False).click()
+                roles=page.get_by_label('Hak Akses / Role',exact=True)
+                expect(roles.locator('option')).to_have_count(3)
+                assert roles.locator('option').evaluate_all('(options)=>options.map(option=>option.value)')==['pengkar','asrama','viewer']
+                expect(roles).to_have_value('pengkar')
+                print('PASS: Operator report contains only allowed sections and account role choices are restricted')
                 assert not errors, errors
                 print('PASS: mobile navigation; no browser JavaScript errors')
                 browser.close()

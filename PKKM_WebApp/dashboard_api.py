@@ -253,6 +253,15 @@ class AutoConnectPending(Input):
 
 
 def register(app, connect, auth, allow, audit, hash_password, check_password):
+    delegated_roles={'pengkar','asrama','viewer'}
+    def manage_accounts(user,target_role=None):
+        if user['role']=='admin':return
+        if user['role']=='operator' and (target_role is None or target_role in delegated_roles):return
+        raise HTTPException(403,'Operator hanya dapat mengelola Operator Pengkar, Operator Asrama, dan Viewer')
+
+    def migration_access(user=Depends(auth)):
+        if user['role']=='operator':raise HTTPException(403,'Menu migrasi tidak tersedia untuk Operator KKA')
+
     def visible(user, program):
         return user['role'] not in ('pengkar', 'asrama') or program == ('Asrama' if user['role'] == 'asrama' else 'Pengembangan Karakter')
 
@@ -302,7 +311,7 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             students.extend(dict(row,directoryId=row['record_key']) for row in c.execute('''SELECT d.*,p.activity_id AS activityId
                 FROM activity_unidentified_participants p JOIN student_directory d ON d.record_key=p.record_key''') if row['activityId'] in ids)
             master=[]
-            if user['role'] in ('admin','operator'):
+            if user['role']=='admin':
                 directory=[dict(r) for r in c.execute('SELECT * FROM student_directory ORDER BY nama,record_key')]
                 known={row['nim'] for row in directory if row['nim']}
                 master=[dict(row,directoryId=row['record_key']) for row in directory]
@@ -310,10 +319,10 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             pending=[dict(id=row['record_key'],**json.loads(row['payload'])) for row in c.execute('SELECT * FROM pending_surveys WHERE user_id=?',(user['id'],))]
             pending_participants=[dict(id=row['record_key'],**json.loads(row['payload'])) for row in c.execute('SELECT * FROM pending_participants WHERE user_id=?',(user['id'],))]
             users = []
-            if user['role'] == 'admin':
+            if user['role'] in ('admin','operator'):
                 users = [dict(id=r['id'], username=r['username'], nama=r['full_name'], email=r['email'],
                               role=r['dashboard_role'] or r['role'], status='Aktif' if r['active'] else 'Nonaktif')
-                         for r in c.execute('SELECT * FROM users ORDER BY id')]
+                         for r in c.execute('SELECT * FROM users ORDER BY id') if user['role']=='admin' or (r['dashboard_role'] or r['role']) in delegated_roles]
             return dict(activities=activities, students=students, masterStudents=master,pendingSurveys=pending,pendingParticipants=pending_participants,surveys=surveys, adminList=users, profile=profile(user))
 
     @app.get('/api/dashboard')
@@ -383,7 +392,7 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
     def create(data: DashboardActivity, user=Depends(auth)):
         return save(data,user)
 
-    @app.post('/api/migrate/students')
+    @app.post('/api/migrate/students', dependencies=[Depends(migration_access)])
     def migrate_students(data: StudentMigration, user=Depends(auth)):
         if user['role'] not in ('admin','operator'):
             raise HTTPException(403,'Master mahasiswa hanya dikelola Super Admin atau Operator KKA')
@@ -475,7 +484,7 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             c.execute('INSERT INTO activity_details VALUES(?,?) ON CONFLICT(activity_id) DO UPDATE SET payload=excluded.payload',(ident,json.dumps(payload)))
         return {'created':added,'skipped':skipped,'pending':pending_count,'activities':len(touched)}
 
-    @app.post('/api/migrate/participants')
+    @app.post('/api/migrate/participants', dependencies=[Depends(migration_access)])
     def migrate_participants(data: ParticipantMigration,user=Depends(auth)):
         with connect() as c:
             c.execute('BEGIN IMMEDIATE')
@@ -539,11 +548,11 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             return {**result,'processed':len(selected),'remainingMatched':summary['matched']-matched_processed,
                     'remainingGroup':len(eligible)-len(selected),'remaining':summary['total']-len(selected)}
 
-    @app.post('/api/migrate/participants/pending/auto-connect')
+    @app.post('/api/migrate/participants/pending/auto-connect', dependencies=[Depends(migration_access)])
     def auto_connect_participants(data: AutoConnectPending,user=Depends(auth)):
         return connect_pending(data,user,'participants')
 
-    @app.post('/api/migrate/participants/pending/{record_key}/resolve')
+    @app.post('/api/migrate/participants/pending/{record_key}/resolve', dependencies=[Depends(migration_access)])
     def resolve_pending_participants(record_key: str,data: ResolveSurvey,user=Depends(auth)):
         with connect() as c:
             c.execute('BEGIN IMMEDIATE')
@@ -559,7 +568,7 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             audit(c,user,'resolve_participant','activity',data.activityId)
         return result
 
-    @app.post('/api/migrate/activities')
+    @app.post('/api/migrate/activities', dependencies=[Depends(migration_access)])
     def migrate_activities(data: ActivityMigration, user=Depends(auth)):
         for item in data.items:
             allow(user,item.program)
@@ -636,7 +645,7 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
                 write_surveys(c,ident,existing+additions,user)
         return {'created':created,'skipped':skipped,'pending':pending_count,'activities':len(grouped)}
 
-    @app.post('/api/migrate/surveys')
+    @app.post('/api/migrate/surveys', dependencies=[Depends(migration_access)])
     def migrate_surveys(data: SurveyMigration,user=Depends(auth)):
         with connect() as c:
             c.execute('BEGIN IMMEDIATE')
@@ -644,11 +653,11 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             audit(c,user,'migrate_surveys','migration',None)
         return result
 
-    @app.post('/api/migrate/surveys/pending/auto-connect')
+    @app.post('/api/migrate/surveys/pending/auto-connect', dependencies=[Depends(migration_access)])
     def auto_connect_surveys(data: AutoConnectPending,user=Depends(auth)):
         return connect_pending(data,user,'surveys')
 
-    @app.post('/api/migrate/surveys/pending/{record_key}/resolve')
+    @app.post('/api/migrate/surveys/pending/{record_key}/resolve', dependencies=[Depends(migration_access)])
     def resolve_pending(record_key: str, data: ResolveSurvey, user=Depends(auth)):
         if user['role']=='viewer':raise HTTPException(403,'Akses baca saja')
         with connect() as c:
@@ -688,7 +697,7 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
 
     @app.post('/api/dashboard/users', status_code=201)
     def create_user(data: DashboardUser, user=Depends(auth)):
-        allow(user, admin=True)
+        manage_accounts(user,data.role)
         role = {'operator':'pengkar', 'verifier':'viewer'}.get(data.role,data.role)
         try:
             with connect() as c:
@@ -701,12 +710,13 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
 
     @app.delete('/api/dashboard/users/{ident}')
     def deactivate_user(ident: int, user=Depends(auth)):
-        allow(user, admin=True)
+        manage_accounts(user)
         with connect() as c:
             c.execute('BEGIN IMMEDIATE')
             target = c.execute('SELECT * FROM users WHERE id=? AND active=1', (ident,)).fetchone()
             if not target:
                 raise HTTPException(404,'Akun aktif tidak ditemukan')
+            manage_accounts(user,target['dashboard_role'] or target['role'])
             if ident == user['id']:
                 raise HTTPException(409,'Tidak dapat menonaktifkan akun yang sedang digunakan')
             if target['role'] == 'admin' and c.execute("SELECT count(*) FROM users WHERE role='admin' AND active=1").fetchone()[0] <= 1:

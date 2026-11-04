@@ -98,9 +98,12 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
 
       const [profileData, setProfileData] = useState({username:'',nama:'',role:'viewer',email:'',instansi:'',kampus:'Telkom University'});
       const isAdmin = profileData.role === 'admin';
+      const isOperator=profileData.role==='operator';
+      const canManageAccounts=isAdmin||isOperator;
       const canWrite = ['admin','operator','pengkar','asrama'].includes(profileData.role);
       const canEdit = (act) => canWrite && (!['pengkar','asrama'].includes(profileData.role) || act.program === (profileData.role==='asrama'?'Asrama':'Pengembangan Karakter'));
       const roleLabel = role => ({admin:'Super Admin KKA',operator:'Operator KKA',verifier:'Verifikator Survey',pengkar:'Operator Pengkar',asrama:'Operator Asrama',viewer:'Viewer'}[role] || role);
+      useEffect(()=>{if(isOperator)setNewAdmin(previous=>({...previous,role:'pengkar'}));},[isOperator]);
       useEffect(() => {
         if (!token) return;
         load(token).then(()=>setIsLoggedIn(true)).catch(error=>setLoginError(error.message));
@@ -226,7 +229,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const handleCreateAdmin = async (e) => {
         e.preventDefault();await run(async()=>{
           await api('/dashboard/users',{method:'POST',body:JSON.stringify(newAdmin)});await load();
-          setNewAdmin({username:'',email:'',role:'operator',nama:'',password:''});setNotice('Akun baru berhasil dibuat dan dapat digunakan untuk login.');
+          setNewAdmin({username:'',email:'',role:isOperator?'pengkar':'operator',nama:'',password:''});setNotice('Akun baru berhasil dibuat dan dapat digunakan untuk login.');
         });
       };
       const handleDeleteAdmin = async (id,username) => {
@@ -449,7 +452,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                 </button>
 
                 <button
-                  disabled={!isAdmin} title={isAdmin?'':'Hanya Super Admin'} onClick={() => setActiveNav('pengaturanAdmin')}
+                  disabled={!canManageAccounts} title={canManageAccounts?'':'Hanya Super Admin atau Operator KKA'} onClick={() => setActiveNav('pengaturanAdmin')}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeNav === 'pengaturanAdmin' ? 'bg-[#fde8e8] text-[#D71920]' : 'text-slate-600 hover:bg-slate-50'}`}
                 >
                   <span className="text-base">👥</span> Pengaturan Admin
@@ -723,8 +726,8 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {activeNav === 'laporan' && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
 
-                <MigrationPanel activities={activities} role={profileData.role} api={api} reload={load} pendingSurveys={pendingSurveys} pendingParticipants={pendingParticipants} />
-                {['admin','operator'].includes(profileData.role)&&<StudentRecap mode="master" rows={masterStudents} activities={activities} />}
+                {!isOperator&&<MigrationPanel activities={activities} role={profileData.role} api={api} reload={load} pendingSurveys={pendingSurveys} pendingParticipants={pendingParticipants} />}
+                {isAdmin&&<StudentRecap mode="master" rows={masterStudents} activities={activities} />}
                 <div className="bg-white border rounded-2xl p-4 space-y-3 text-xs no-print"><h3 className="font-bold">Filter Laporan</h3><div className="flex flex-wrap gap-3"><input aria-label="Cari laporan" placeholder="NIM / nama kegiatan" value={searchNim} onChange={e=>setSearchNim(e.target.value)} className="border rounded-lg p-2"/><select aria-label="Tahun laporan" value={filterYear} onChange={e=>setFilterYear(e.target.value)} className="border rounded-lg p-2"><option>Semua Tahun</option>{years.map(y=><option key={y}>{y}</option>)}</select><select aria-label="Triwulan laporan" value={filterTw} onChange={e=>setFilterTw(e.target.value)} className="border rounded-lg p-2"><option>Semua Triwulan</option>{['TW1','TW2','TW3','TW4'].map(q=><option key={q}>{q}</option>)}</select><select aria-label="Kategori laporan" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)} className="border rounded-lg p-2"><option>Semua Kategori</option>{categories.map(c=><option key={c}>{c}</option>)}</select><button onClick={()=>{setSearchNim('');setFilterYear('Semua Tahun');setFilterTw('Semua Triwulan');setFilterCategory('Semua Kategori');}} className="border rounded-lg p-2">Reset Filter</button></div></div>
                 {/* FORM INPUT KEGIATAN 16 FIELD MASTER PERSIS GAMBAR LAMPIRAN */}
                 <div className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
@@ -1103,7 +1106,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                   <div className="flex flex-wrap justify-between items-center gap-3 text-xs text-slate-600"><p>Menampilkan {filteredActivities.length?activityStart+1:0}–{Math.min(activityStart+activityLimit,filteredActivities.length)} dari {filteredActivities.length} kegiatan. Ekspor tetap memuat semua hasil filter.</p><nav aria-label="Halaman daftar kegiatan" className="flex gap-3 items-center"><button disabled={currentActivityPage===1} onClick={()=>setActivityPage(currentActivityPage-1)} className="border rounded-lg p-2">Sebelumnya</button><span>Halaman {currentActivityPage} dari {activityPages}</span><button disabled={currentActivityPage===activityPages} onClick={()=>setActivityPage(currentActivityPage+1)} className="border rounded-lg p-2">Berikutnya</button></nav></div>
                 </div>
 
-              <SurveySummary surveys={filteredSurveys} activities={filteredActivities} />
+              {!isOperator&&<SurveySummary surveys={filteredSurveys} activities={filteredActivities} />}
               <StudentRecap rows={filteredStudents} activities={filteredActivities} />
               </main>
             )}
@@ -1111,7 +1114,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {/* ========================================================================= */}
             {/* 3. MENU: PENGATURAN ADMIN (BUATKAN & HAPUS AKUN)                           */}
             {/* ========================================================================= */}
-            {activeNav === 'pengaturanAdmin' && isAdmin && (
+            {activeNav === 'pengaturanAdmin' && canManageAccounts && (
               <main className="p-6 md:p-8 space-y-6 max-w-5xl mx-auto w-full">
                 <div>
                   <h1 className="text-xl font-bold text-slate-900">Pengaturan Akun Administrator KKA</h1>
@@ -1156,9 +1159,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                         onChange={(e) => setNewAdmin({ ...newAdmin, role: e.target.value })}
                         className="w-full border rounded-xl p-3 outline-none focus:border-[#D71920] bg-white font-semibold"
                       >
-                        <option value="admin">Super Admin KKA</option>
-                        <option value="operator">Operator KKA</option>
-                        <option value="verifier">Verifikator Survey</option><option value="pengkar">Operator Pengkar</option><option value="asrama">Operator Asrama</option><option value="viewer">Viewer</option>
+                        {isAdmin&&<><option value="admin">Super Admin KKA</option><option value="operator">Operator KKA</option><option value="verifier">Verifikator Survey</option></>}<option value="pengkar">Operator Pengkar</option><option value="asrama">Operator Asrama</option><option value="viewer">Viewer</option>
                       </select>
                     </div>
                     <div className="md:col-span-2"><label className="font-bold block mb-1" htmlFor="field-31">Password awal (minimal 12 karakter) *</label><input id="field-31" required minLength={12} type="password" autoComplete="new-password" value={newAdmin.password} onChange={e=>setNewAdmin({...newAdmin,password:e.target.value})} className="w-full border rounded-xl p-3" /></div>
