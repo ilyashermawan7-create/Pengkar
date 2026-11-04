@@ -94,13 +94,23 @@ Tidak ada sinkronisasi Looker Studio atau impor otomatis localStorage lama.
 
 ## Cetak dan PDF
 
-Tombol Cetak / PDF mencetak dokumen terpisah dari `frontend/PrintReport.jsx`,
-bukan formulir atau halaman aplikasi. Dokumen berisi data kegiatan, rekap
-mahasiswa, dan respons survei sesuai filter laporan. Seluruh baris ikut
-dicetak, termasuk mahasiswa di luar batas 100 baris pratinjau layar.
-Format cetak adalah A4 landscape, dengan header tabel berulang saat berganti
-halaman. Pilih tujuan **Save as PDF / Simpan sebagai PDF** di dialog browser
-untuk mengunduh dokumen, atau pilih printer untuk mencetak ke kertas.
+Tombol **Unduh PDF** membuat file `Laporan_PKKM.pdf` langsung dari data memakai
+`frontend/reportPdf.mjs` (jsPDF dan AutoTable). Tombol ini tidak menggunakan
+`window.print`, screenshot, atau HTML homepage. Font lokal berlisensi OFL
+disertakan di `static/fonts/report-sans.ttf` (konversi font Latin 400 yang sama
+dengan font aplikasi dari WOFF menjadi TTF menggunakan FontTools).
+Dokumen berisi kegiatan, rekap mahasiswa, dan respons survei sesuai filter
+laporan. Seluruh hasil filter masuk PDF meskipun tampilan dipaginasi 10 atau
+50 baris. Formatnya A4 landscape, header tabel berulang, dan nomor halaman.
+
+Rekap mahasiswa menyediakan pilihan 10, 50, dan Semua, navigasi Sebelumnya /
+Berikutnya, serta pencarian. Jumlah baris layar tidak membatasi ekspor Excel
+maupun PDF. `frontend/PrintReport.jsx` tetap menyediakan tampilan khusus cetak
+untuk Ctrl+P, tetapi bukan jalur tombol unduh PDF.
+
+Halaman utama dikirim dengan `Cache-Control: no-store`. Build menambahkan
+hash konten pada URL aset JS/CSS di `static/index.html` agar versi kode dan
+gaya yang baru dimuat bersama setelah deployment.
 
 ## Validasi
 

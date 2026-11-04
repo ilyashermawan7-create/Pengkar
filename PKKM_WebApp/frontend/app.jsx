@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import {readSpreadsheet, readParticipants} from './spreadsheet.mjs';
 import StudentRecap from './StudentRecap.jsx';
 import PrintReport from './PrintReport.jsx';
+import {downloadReportPdf} from './reportPdf.mjs';
 
     const { useState, useEffect, useRef } = React;
 
@@ -1048,7 +1049,8 @@ import PrintReport from './PrintReport.jsx';
                 {/* TABEL KEGIATAN TERDATA */}
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-6 space-y-4">
                   <h3 className="font-bold text-sm text-slate-900">Daftar Kegiatan Terpublikasi ({filteredActivities.length})</h3>
-                  <div className="flex gap-2"><button onClick={exportActivities} className="border rounded-lg px-3 py-2 text-xs">Ekspor Excel</button><button onClick={()=>window.print()} className="border rounded-lg px-3 py-2 text-xs">Cetak / PDF</button></div>
+                  <div className="flex gap-2"><button onClick={exportActivities} className="border rounded-lg px-3 py-2 text-xs">Ekspor Excel</button><button disabled={busy} onClick={()=>run(()=>downloadReportPdf({activities:filteredActivities,students:filteredStudents,surveys:filteredSurveys,filters:{year:filterYear,quarter:filterTw,category:filterCategory,search:searchNim},preparedBy:profileData.nama}))} className="border rounded-lg px-3 py-2 text-xs">Unduh PDF</button></div>
+                  <p className="text-xs text-slate-500">PDF diunduh langsung dan memuat seluruh data sesuai filter laporan, tanpa formulir aplikasi.</p>
                   <div className="overflow-x-auto custom-scrollbar">
                     <table className="w-full text-xs text-left">
                       <thead className="bg-[#991b1b] text-white uppercase text-[10px]">

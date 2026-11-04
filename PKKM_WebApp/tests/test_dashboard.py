@@ -59,6 +59,9 @@ class DashboardTests(unittest.TestCase):
         return response.json()['id'], self.login(username)
 
     def test_login_required_and_no_demo_data(self):
+        homepage=self.client.get('/')
+        self.assertEqual(homepage.headers.get('cache-control'),'no-store')
+        self.assertIn('/static/app.js?v=',homepage.text)
         self.assertEqual(self.client.get('/api/dashboard').status_code,401)
         data = self.snapshot()
         self.assertEqual(data['activities'],[])

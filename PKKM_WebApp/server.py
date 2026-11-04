@@ -212,4 +212,4 @@ register(app,connect,auth,allow,audit,hash_password,check_password)
 
 app.mount('/static',StaticFiles(directory=BASE/'static'),name='static')
 @app.get('/')
-def index():return FileResponse(BASE/'static'/'index.html')
+def index():return FileResponse(BASE/'static'/'index.html',headers={'Cache-Control':'no-store'})

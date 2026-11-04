@@ -116,14 +116,12 @@ def main():
                     page.get_by_role('button',name='Ekspor Excel',exact=True).click()
                 assert download.value.suggested_filename=='Laporan_PKKM.xlsx'
                 print('PASS: Excel report download')
-                expect(page.locator('#pkkm-print-report')).to_be_hidden()
-                page.evaluate('() => { window.__printCalls=0; window.print=()=>{window.__printCalls+=1;}; }')
-                page.get_by_role('button',name='Cetak / PDF',exact=True).click()
-                page.wait_for_function('window.__printCalls >= 1',timeout=5000)
-                page.emulate_media(media='print')
-                expect(page.locator('#root')).to_be_hidden()
-                expect(page.locator('#pkkm-print-report')).to_be_visible()
-                pdf=page.pdf(path=str(ARTIFACTS/'laporan.pdf'),prefer_css_page_size=True,print_background=True)
+                page.evaluate('() => {window.print=()=>{throw Error("Homepage print must never be used");};}')
+                with page.expect_download() as pdf_download:
+                    page.get_by_role('button',name='Unduh PDF',exact=True).click()
+                assert pdf_download.value.suggested_filename=='Laporan_PKKM.pdf'
+                pdf=Path(pdf_download.value.path()).read_bytes()
+                (ARTIFACTS/'laporan.pdf').write_bytes(pdf)
                 reader=PdfReader(io.BytesIO(pdf))
                 text=' '.join(p.extract_text() for p in reader.pages)
                 for expected in ['Kegiatan Uji Browser','Peserta Uji','123456789012','Rekap Data Mahasiswa','Data Kegiatan']:
@@ -132,13 +130,13 @@ def main():
                     assert forbidden not in text, (forbidden,text)
                 assert len(reader.pages)<=2,len(reader.pages)
                 assert float(reader.pages[0].mediabox.width)>float(reader.pages[0].mediabox.height)
-                page.emulate_media(media='screen')
-                print('PASS: PDF contains report data in landscape, excludes application form/homepage')
+                print('PASS: direct PDF download contains report data, without calling homepage print')
                 page.get_by_label('Cari laporan',exact=True).fill('TidakAdaHasilPDF')
-                page.emulate_media(media='print')
-                empty_pdf=page.pdf(prefer_css_page_size=True)
+                with page.expect_download() as empty_download:
+                    page.get_by_role('button',name='Unduh PDF',exact=True).click()
+                empty_pdf=Path(empty_download.value.path()).read_bytes()
                 empty_text=' '.join(p.extract_text() for p in PdfReader(io.BytesIO(empty_pdf)).pages)
-                assert 'Tidak ada kegiatan sesuai filter' in empty_text
+                assert 'Tidak ada data sesuai filter' in empty_text
                 assert 'Kegiatan Uji Browser' not in empty_text
                 assert 'Peserta Uji' not in empty_text
                 page.emulate_media(media='screen')
@@ -154,12 +152,37 @@ def main():
                 page.reload()
                 expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
                 expect(page.get_by_text('Total Kegiatan',exact=True).locator('..')).to_contain_text('2')
-                page.emulate_media(media='print')
-                large_pdf=page.pdf(path=str(ARTIFACTS/'laporan-banyak-mahasiswa.pdf'),prefer_css_page_size=True)
+                recap=page.get_by_role('region',name='Rekap mahasiswa tersimpan',exact=True)
+                expect(recap.locator('tbody tr')).to_have_count(10)
+                recap.get_by_role('button',name='Berikutnya',exact=True).click()
+                expect(recap).to_contain_text('Halaman 2 dari 14')
+                expect(recap.locator('tbody tr')).to_have_count(10)
+                recap.get_by_role('button',name='Sebelumnya',exact=True).click()
+                expect(recap).to_contain_text('Halaman 1 dari 14')
+                expect(recap.get_by_role('button',name='Sebelumnya',exact=True)).to_be_disabled()
+                recap.get_by_label('Jumlah mahasiswa per halaman',exact=True).select_option('50')
+                expect(recap.locator('tbody tr')).to_have_count(50)
+                expect(recap).to_contain_text('Halaman 1 dari 3')
+                recap.get_by_role('button',name='Berikutnya',exact=True).click()
+                expect(recap.locator('tbody tr')).to_have_count(50)
+                recap.get_by_role('button',name='Berikutnya',exact=True).click()
+                expect(recap.locator('tbody tr')).to_have_count(36)
+                recap.get_by_label('Jumlah mahasiswa per halaman',exact=True).select_option('all')
+                expect(recap.locator('tbody tr')).to_have_count(136)
+                expect(recap.get_by_role('button',name='Berikutnya',exact=True)).to_be_disabled()
+                recap.get_by_label('Cari mahasiswa dalam rekap',exact=True).fill('Cetak134')
+                expect(recap.locator('tbody tr')).to_have_count(1)
+                recap.get_by_label('Cari mahasiswa dalam rekap',exact=True).fill('')
+                recap.get_by_label('Jumlah mahasiswa per halaman',exact=True).select_option('10')
+                print('PASS: student pagination 10/50/all, next/previous, final page and search')
+                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                with page.expect_download() as large_download:
+                    page.get_by_role('button',name='Unduh PDF',exact=True).click()
+                large_pdf=Path(large_download.value.path()).read_bytes()
+                (ARTIFACTS/'laporan-banyak-mahasiswa.pdf').write_bytes(large_pdf)
                 large_text=' '.join(p.extract_text() for p in PdfReader(io.BytesIO(large_pdf)).pages)
                 assert 'Cetak0' in large_text and 'Cetak134' in large_text
                 assert '900000000134' in large_text
-                page.emulate_media(media='screen')
                 removed=page.request.delete(url+'/api/activities/'+str(created_id),headers=auth)
                 assert removed.status==200
                 print('PASS: multipage PDF includes all 135 participants beyond the screen preview limit')
