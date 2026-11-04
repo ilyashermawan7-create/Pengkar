@@ -225,7 +225,7 @@ class ParticipantMigration(Input):
     items: list[ParticipantMigrationRow] = Field(min_length=1,max_length=10000)
 
 
-class AutoConnectParticipants(Input):
+class AutoConnectPending(Input):
     dry_run: bool = True
     limit: int = Field(default=1000,ge=1,le=1000)
     groupKey: str = Field(default='',max_length=64)
@@ -458,9 +458,13 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             audit(c,user,'migrate_participants','migration',None)
         return result
 
-    @app.post('/api/migrate/participants/pending/auto-connect')
-    def auto_connect_participants(data: AutoConnectParticipants,user=Depends(auth)):
-        allow(user)
+    def connect_pending(data,user,kind):
+        surveys=kind=='surveys'
+        table='pending_surveys' if surveys else 'pending_participants'
+        model=SurveyMigrationRow if surveys else ParticipantMigrationRow
+        if surveys:
+            if user['role']=='viewer':raise HTTPException(403,'Akses baca saja')
+        else:allow(user)
         with connect() as c:
             if not data.dry_run:c.execute('BEGIN IMMEDIATE')
             allowed=[dict(row) for row in c.execute('SELECT id,nama_kegiatan,tanggal,program FROM activities') if visible(user,row['program'])]
@@ -468,8 +472,8 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             records=[]
             groups={}
             summary=dict(total=0,matched=0,ambiguous=0,unmatched=0,date_conflict=0,blank=0,invalid=0)
-            for row in c.execute('SELECT * FROM pending_participants WHERE user_id=? ORDER BY rowid',(user['id'],)):
-                try:item=ParticipantMigrationRow.model_validate_json(row['payload'])
+            for row in c.execute(f'SELECT * FROM {table} WHERE user_id=? ORDER BY rowid',(user['id'],)):
+                try:item=model.model_validate_json(row['payload'])
                 except ValueError:
                     summary['total']+=1;summary['invalid']+=1
                     continue
@@ -481,13 +485,14 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
                                  'count':0,'status':status,'targetId':target['id'] if target else None,
                                  'targetName':target['nama_kegiatan'] if target else '', 'canGroup':bool(item.namaKegiatan),'examples':[]}
                 groups[key]['count']+=1
-                example=item.student.nama or item.student.nim
+                identity=item.response if surveys else item.student
+                example=identity.nama or identity.nim
                 if example and len(groups[key]['examples'])<3:groups[key]['examples'].append(example)
                 records.append((row['record_key'],item,key,target))
             if data.dry_run:
                 return {'summary':summary,'groups':sorted(groups.values(),key=lambda group:-group['count'])}
             if bool(data.groupKey)!=bool(data.activityId):
-                raise HTTPException(422,'Pilih kelompok peserta dan kegiatan tujuan bersamaan')
+                raise HTTPException(422,'Pilih kelompok data dan kegiatan tujuan bersamaan')
             forced=None
             if data.activityId:
                 forced=next((activity for activity in allowed if activity['id']==data.activityId),None)
@@ -502,12 +507,16 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
                 item.activityId=target['id']
                 item.namaKegiatan=target['nama_kegiatan']
                 items.append(item)
-            result=apply_participants(c,items,user)
-            c.executemany('DELETE FROM pending_participants WHERE record_key=? AND user_id=?',[(record[0],user['id']) for record in selected])
-            audit(c,user,'bulk_connect_participants','activity',forced['id'] if forced else None)
+            result=apply_survey_migration(c,items,user) if surveys else apply_participants(c,items,user)
+            c.executemany(f'DELETE FROM {table} WHERE record_key=? AND user_id=?',[(record[0],user['id']) for record in selected])
+            audit(c,user,'bulk_connect_'+kind,'activity',forced['id'] if forced else None)
             matched_processed=sum(record[3] is not None for record in selected)
             return {**result,'processed':len(selected),'remainingMatched':summary['matched']-matched_processed,
                     'remainingGroup':len(eligible)-len(selected),'remaining':summary['total']-len(selected)}
+
+    @app.post('/api/migrate/participants/pending/auto-connect')
+    def auto_connect_participants(data: AutoConnectPending,user=Depends(auth)):
+        return connect_pending(data,user,'participants')
 
     @app.post('/api/migrate/participants/pending/{record_key}/resolve')
     def resolve_pending_participants(record_key: str,data: ResolveSurvey,user=Depends(auth)):
@@ -569,43 +578,50 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             identity['scores']=[response.skorMateri,response.skorNarasumber,response.skorFasilitas,response.skorDampakKarakter]
         return hashlib.sha256(json.dumps(identity,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
 
-    @app.post('/api/migrate/surveys')
-    def migrate_surveys(data: SurveyMigration, user=Depends(auth)):
-        if user['role']=='viewer':
-            raise HTTPException(403,'Akses baca saja')
+    def apply_survey_migration(c,items,user):
+        if user['role']=='viewer':raise HTTPException(403,'Akses baca saja')
         created=skipped=pending_count=0
+        grouped={}
+        for item in items:
+            if item.activityId is None:
+                payload=item.model_dump(mode='json')
+                record_key=hashlib.sha256((str(user['id'])+':'+(item.importKey or json.dumps(payload,sort_keys=True))).encode()).hexdigest()
+                c.execute('INSERT INTO pending_surveys VALUES(?,?,?) ON CONFLICT(record_key) DO NOTHING',(record_key,user['id'],json.dumps(payload)))
+                pending_count+=1
+                continue
+            row=c.execute('SELECT nama_kegiatan,program FROM activities WHERE id=?',(item.activityId,)).fetchone()
+            if not row or not visible(user,row['program']):
+                raise HTTPException(422,f'Baris {item.sourceRow}: kegiatan tidak ditemukan atau tidak dapat diakses')
+            if item.namaKegiatan and normalized_name(item.namaKegiatan)!=normalized_name(row['nama_kegiatan']):
+                raise HTTPException(422,f'Baris {item.sourceRow}: nama kegiatan tidak sesuai ID kegiatan')
+            grouped.setdefault(item.activityId,[]).append(item.response)
+        for ident, imported in grouped.items():
+            existing=[Survey.model_validate_json(row['payload']) for row in c.execute('SELECT payload FROM survey_responses WHERE activity_id=?',(ident,))]
+            keys={survey_key(response) for response in existing}
+            additions=[]
+            for response in imported:
+                fingerprint=survey_key(response)
+                if fingerprint in keys:
+                    skipped+=1
+                    continue
+                additions.append(response)
+                keys.add(fingerprint)
+                created+=1
+            if additions:
+                write_surveys(c,ident,existing+additions,user)
+        return {'created':created,'skipped':skipped,'pending':pending_count,'activities':len(grouped)}
+
+    @app.post('/api/migrate/surveys')
+    def migrate_surveys(data: SurveyMigration,user=Depends(auth)):
         with connect() as c:
             c.execute('BEGIN IMMEDIATE')
-            grouped={}
-            for item in data.items:
-                if item.activityId is None:
-                    payload=item.model_dump(mode='json')
-                    record_key=hashlib.sha256((str(user['id'])+':'+(item.importKey or json.dumps(payload,sort_keys=True))).encode()).hexdigest()
-                    c.execute('INSERT INTO pending_surveys VALUES(?,?,?) ON CONFLICT(record_key) DO NOTHING',(record_key,user['id'],json.dumps(payload)))
-                    pending_count+=1
-                    continue
-                row=c.execute('SELECT nama_kegiatan,program FROM activities WHERE id=?',(item.activityId,)).fetchone()
-                if not row or not visible(user,row['program']):
-                    raise HTTPException(422,f'Baris {item.sourceRow}: kegiatan tidak ditemukan atau tidak dapat diakses')
-                if item.namaKegiatan and normalized_name(item.namaKegiatan)!=normalized_name(row['nama_kegiatan']):
-                    raise HTTPException(422,f'Baris {item.sourceRow}: nama kegiatan tidak sesuai ID kegiatan')
-                grouped.setdefault(item.activityId,[]).append(item.response)
-            for ident, imported in grouped.items():
-                existing=[Survey.model_validate_json(row['payload']) for row in c.execute('SELECT payload FROM survey_responses WHERE activity_id=?',(ident,))]
-                keys={survey_key(response) for response in existing}
-                additions=[]
-                for response in imported:
-                    fingerprint=survey_key(response)
-                    if fingerprint in keys:
-                        skipped+=1
-                        continue
-                    additions.append(response)
-                    keys.add(fingerprint)
-                    created+=1
-                if additions:
-                    write_surveys(c,ident,existing+additions,user)
+            result=apply_survey_migration(c,data.items,user)
             audit(c,user,'migrate_surveys','migration',None)
-        return {'created':created,'skipped':skipped,'pending':pending_count,'activities':len(grouped)}
+        return result
+
+    @app.post('/api/migrate/surveys/pending/auto-connect')
+    def auto_connect_surveys(data: AutoConnectPending,user=Depends(auth)):
+        return connect_pending(data,user,'surveys')
 
     @app.post('/api/migrate/surveys/pending/{record_key}/resolve')
     def resolve_pending(record_key: str, data: ResolveSurvey, user=Depends(auth)):

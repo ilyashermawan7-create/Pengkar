@@ -379,9 +379,9 @@ def main():
                 expect(migration).to_contain_text('1 respons disimpan untuk dicocokkan')
                 pending_region=page.get_by_label('Survei perlu dicocokkan',exact=True)
                 target=next(a['id'] for a in snapshot['activities'] if a['namaKegiatan']=='Webinar Migrasi A')
-                pending_region.locator('select').select_option(str(target))
-                pending_region.get_by_role('button',name='Hubungkan Survei',exact=True).click()
-                expect(migration).to_contain_text('Survei berhasil dihubungkan. Nilai kosong tetap kosong.')
+                pending_region.locator('select[aria-label^="Kegiatan untuk kelompok survei "]').select_option(str(target))
+                pending_region.get_by_role('button',name='Hubungkan 1 Survei Sekaligus',exact=True).click()
+                expect(migration).to_contain_text('Selesai: 1 survei diproses, 1 hubungan baru')
                 snapshot=page.request.get(url+'/api/dashboard',headers=auth).json()
                 partial_record=next(s for s in snapshot['surveys'] if s['nim']=='000000000303')
                 assert partial_record['tanggalSurvey'] is None
@@ -553,6 +553,26 @@ def main():
                     if(rows.length!==3 || new Set(rows.map(r=>r.kelompokRekap)).size!==3)process.exit(1);'''
                 subprocess.run(['node','--input-type=module','-e',verify_groups,metrics_export.value.path()],cwd=ROOT,check=True)
                 print('PASS: ratio uses total attendance; exclusive category sums and activity list/export agree under the same filter')
+                result=page.request.post(url+'/api/dashboard/activities',headers=auth,data={'namaKegiatan':'Survei Auto & Karakter','tanggal':'2026-11-04','program':'Pengembangan Karakter'})
+                assert result.status==201,result.text()
+                survey_id=result.json()['id']
+                rows=[{'namaKegiatan':'survei auto and karakter','importKey':'survey-auto-ui:'+str(i),'response':{'nim':str(850000000000+i),'answers':[None,5]+[None]*18,'saran':'Saran asli'}} for i in range(1573)]
+                rows.append({**rows[0],'importKey':'survey-auto-ui-duplicate'})
+                result=page.request.post(url+'/api/migrate/surveys',headers=auth,data={'items':rows})
+                assert result.status==200,result.text()
+                page.reload()
+                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                migration=page.get_by_role('region',name='Migrasi data kegiatan dan survei',exact=True)
+                matcher=page.get_by_role('region',name='Survei perlu dicocokkan',exact=True)
+                expect(matcher.get_by_role('button',name='Hubungkan Otomatis (1574)',exact=True)).to_be_enabled()
+                matcher.get_by_role('button',name='Hubungkan Otomatis (1574)',exact=True).click()
+                expect(migration).to_contain_text('Selesai: 1574 survei diproses, 1573 hubungan baru, 1 duplikat',timeout=60000)
+                after=page.request.get(url+'/api/dashboard',headers=auth).json()
+                assert not after['pendingSurveys']
+                stored=[row for row in after['surveys'] if row['activityId']==survey_id]
+                assert len(stored)==1573
+                assert stored[0]['answers']==[None,5]+[None]*18 and stored[0]['saran']=='Saran asli'
+                print('PASS: auto-connect 1574 surveys across batches, skip duplicates, preserve original partial answers')
                 assert not errors, errors
                 print('PASS: mobile navigation; no browser JavaScript errors')
                 browser.close()

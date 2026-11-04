@@ -499,6 +499,88 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(self.client.post('/api/migrate/participants/pending/auto-connect',headers=headers,json={}).status_code,403)
         self.assertEqual(self.client.post('/api/migrate/participants/pending/auto-connect',headers=self.headers,json={'limit':1001}).status_code,422)
 
+    def test_survey_auto_connect_preserves_existing_answers_and_skips_duplicates(self):
+        target=self.create(self.activity(namaKegiatan='Survei — Mental & Karakter'))
+        answers=[None,5]+[None]*18
+        response={'tanggalSurvey':'2026-11-05','nim':'000000000011','answers':answers,'saran':'Pertanyaan asli tetap'}
+        staged=[{'namaKegiatan':'survei: mental and karakter','importKey':str(i),'response':response} for i in range(2)]
+        self.client.post('/api/migrate/surveys',headers=self.headers,json={'items':staged})
+        preview=self.client.post('/api/migrate/surveys/pending/auto-connect',headers=self.headers,json={})
+        self.assertEqual(preview.status_code,200,preview.text)
+        self.assertEqual(preview.json()['summary']['matched'],2)
+        self.assertEqual(len(self.snapshot()['surveys']),1)
+        result=self.client.post('/api/migrate/surveys/pending/auto-connect',headers=self.headers,json={'dry_run':False})
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(result.json()['processed'],2)
+        self.assertEqual(result.json()['created'],1)
+        self.assertEqual(result.json()['skipped'],1)
+        data=self.snapshot()
+        self.assertEqual(data['pendingSurveys'],[])
+        self.assertEqual(len(data['surveys']),2)
+        saved=next(row for row in data['surveys'] if row['nim']=='000000000011')
+        self.assertEqual(saved['answers'],answers)
+        self.assertEqual(saved['saran'],'Pertanyaan asli tetap')
+        self.assertEqual(saved['tanggalSurvey'],'2026-11-05')
+        self.assertEqual(saved['activityId'],target)
+
+    def test_survey_auto_connect_keeps_ambiguous_and_conflicting_activity_dates(self):
+        first=self.create(self.activity(namaKegiatan='Survei Sama',tanggal='2026-11-04',surveys=[]))
+        second=self.create(self.activity(namaKegiatan='Survei Sama',tanggal='2026-11-05',surveys=[]))
+        base={'tanggalSurvey':'2026-11-04','answers':[4]*20}
+        items=[{'namaKegiatan':'Survei Sama','importKey':'ambiguous','response':base},
+               {'namaKegiatan':'Survei Sama','tanggalKegiatan':'2026-11-05','importKey':'matched','response':base},
+               {'namaKegiatan':'Survei Sama','tanggalKegiatan':'2026-11-06','importKey':'conflict','response':base}]
+        self.client.post('/api/migrate/surveys',headers=self.headers,json={'items':items})
+        preview=self.client.post('/api/migrate/surveys/pending/auto-connect',headers=self.headers,json={}).json()
+        self.assertEqual(preview['summary']['matched'],1)
+        self.assertEqual(preview['summary']['ambiguous'],1)
+        self.assertEqual(preview['summary']['date_conflict'],1)
+        result=self.client.post('/api/migrate/surveys/pending/auto-connect',headers=self.headers,json={'dry_run':False})
+        self.assertEqual(result.json()['processed'],1)
+        self.assertEqual(self.snapshot()['surveys'][0]['activityId'],second)
+        self.assertEqual(len(self.snapshot()['pendingSurveys']),2)
+
+    def test_survey_group_connect_supports_verifier_and_batch_progress(self):
+        target=self.create(self.activity(surveys=[]))
+        _,headers=self.new_user('auto-survey-verifier','verifier')
+        items=[{'namaKegiatan':'Judul Survey Lama','importKey':str(i),'response':{
+            'nim':str(900000000000+i),'answers':[3]*20}} for i in range(3)]
+        self.client.post('/api/migrate/surveys',headers=headers,json={'items':items})
+        plan=self.client.post('/api/migrate/surveys/pending/auto-connect',headers=headers,json={}).json()
+        group=plan['groups'][0]['key']
+        result=self.client.post('/api/migrate/surveys/pending/auto-connect',headers=headers,json={
+            'dry_run':False,'groupKey':group,'activityId':target,'limit':2})
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(result.json()['processed'],2)
+        self.assertEqual(result.json()['remainingGroup'],1)
+        result=self.client.post('/api/migrate/surveys/pending/auto-connect',headers=headers,json={
+            'dry_run':False,'groupKey':group,'activityId':target})
+        self.assertEqual(result.json()['processed'],1)
+        self.assertEqual(len(self.snapshot()['surveys']),3)
+        self.assertEqual(self.snapshot(headers)['pendingSurveys'],[])
+
+    def test_survey_auto_connect_restricts_current_user_and_program(self):
+        target=self.create(self.activity(program='Asrama',surveys=[]))
+        item={'namaKegiatan':'Kegiatan uji','response':{'answers':[4]*20}}
+        self.client.post('/api/migrate/surveys',headers=self.headers,json={'items':[item]})
+        _,headers=self.new_user('auto-survey-pengkar','pengkar')
+        self.client.post('/api/migrate/surveys',headers=headers,json={'items':[item]})
+        plan=self.client.post('/api/migrate/surveys/pending/auto-connect',headers=headers,json={}).json()
+        self.assertEqual(plan['summary']['total'],1)
+        self.assertEqual(plan['summary']['matched'],0)
+        result=self.client.post('/api/migrate/surveys/pending/auto-connect',headers=headers,json={
+            'dry_run':False,'groupKey':plan['groups'][0]['key'],'activityId':target})
+        self.assertEqual(result.status_code,403)
+        self.assertEqual(len(self.snapshot()['pendingSurveys']),1)
+        self.assertEqual(len(self.snapshot(headers)['pendingSurveys']),1)
+
+    def test_survey_auto_connect_denies_viewers_and_invalid_batch_sizes(self):
+        _,headers=self.new_user('survey-auto-viewer','viewer')
+        result=self.client.post('/api/migrate/surveys/pending/auto-connect',headers=headers,json={})
+        self.assertEqual(result.status_code,403)
+        result=self.client.post('/api/migrate/surveys/pending/auto-connect',headers=self.headers,json={'limit':1001})
+        self.assertEqual(result.status_code,422)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,12 +1,12 @@
 import React,{useState} from 'react';
 import PendingParticipantMatcher from './PendingParticipantMatcher.jsx';
+import PendingSurveyMatcher from './PendingSurveyMatcher.jsx';
 import {readActivities,readSurveyResponses,matchSurveyActivities,downloadActivityTemplate,downloadSatisfactionTemplate,readDirectory,downloadDirectoryTemplate,readActivityParticipants,downloadParticipantTemplate} from './migration.mjs';
 
 export default function MigrationPanel({activities,role,api,reload,pendingSurveys=[],pendingParticipants=[]}) {
   const [participantDraft,setParticipantDraft]=useState([]);
   const [participantTarget,setParticipantTarget]=useState('');
   const [studentDraft,setStudentDraft]=useState([]);
-  const [pendingTargets,setPendingTargets]=useState({});
   const [activityDraft,setActivityDraft]=useState([]);
   const [surveyDraft,setSurveyDraft]=useState([]);
   const [target,setTarget]=useState('');
@@ -90,7 +90,7 @@ export default function MigrationPanel({activities,role,api,reload,pendingSurvey
       </div>
     </div>
     {canActivities&&<PendingParticipantMatcher activities={activities} pending={pendingParticipants} api={api} reload={reload} disabled={busy} onComplete={setMessage} />}
-    {pendingSurveys.length>0&&<div aria-label="Survei perlu dicocokkan" className="border border-amber-200 rounded-xl p-4 space-y-3"><h3 className="font-bold">Survei Perlu Dicocokkan ({pendingSurveys.length})</h3>{pendingSurveys.slice(0,50).map(item=><div key={item.id} className="flex flex-wrap gap-2 items-center text-xs border-b pb-2"><span>Baris {item.sourceRow} · {item.namaKegiatan||'Nama kegiatan belum diisi'} · {item.response.nama||item.response.nim||'Responden tanpa identitas'}</span><select aria-label={'Kegiatan untuk survei tertunda '+item.id} value={pendingTargets[item.id]||''} onChange={event=>setPendingTargets({...pendingTargets,[item.id]:event.target.value})} className="border rounded-lg p-2"><option value="">Pilih kegiatan</option>{activities.map(activity=><option key={activity.id} value={activity.id}>{activity.namaKegiatan||'Nama belum diisi'} · {activity.tanggal||activity.tahun||'Tanggal belum diisi'} · ID {activity.id}</option>)}</select><button disabled={busy||!pendingTargets[item.id]} onClick={()=>run(async()=>{await api('/migrate/surveys/pending/'+item.id+'/resolve',{method:'POST',body:JSON.stringify({activityId:Number(pendingTargets[item.id])})});await reload();setMessage('Survei berhasil dihubungkan. Nilai kosong tetap kosong.');})} className="border rounded-lg p-2">Hubungkan Survei</button></div>)}</div>}
+    <PendingSurveyMatcher activities={activities} pending={pendingSurveys} api={api} reload={reload} disabled={busy} onComplete={setMessage} />
     {busy&&<p role="status" className="text-sm text-slate-500">Memproses migrasi…</p>}
   </section>;
 }

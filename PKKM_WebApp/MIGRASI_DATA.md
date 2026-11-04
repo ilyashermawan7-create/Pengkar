@@ -207,3 +207,16 @@ laporan sesuai filter.
 Batas file: 10 MB, maksimal 10.000 baris per impor. Header dicari pada 30 baris
 awal; sheet petunjuk dilewati. Impor berlangsung sebagai satu transaksi per
 permintaan, dan hak akses program tetap diperiksa server.
+
+## Menghubungkan survei tertunda secara otomatis
+
+Pada Laporan → Survei Perlu Dicocokkan, tekan **Periksa Kecocokan**, lalu
+**Hubungkan Otomatis**. Tidak perlu mengunggah ulang berkas. Nama kegiatan
+harus cocok unik; perbedaan huruf, spasi, dan tanda baca diabaikan. Tanggal
+kegiatan yang bertentangan tetap menunggu pencocokan. Tanggal pengisian
+survei tidak digunakan sebagai tanggal kegiatan.
+
+Proses berjalan per 1.000 respons dengan progres. Jawaban asli, kolom kosong,
+dan saran tetap dipertahankan; respons duplikat dilewati. Jika nama ambigu,
+pilih kegiatan tujuan sekali pada kelompok lalu tekan **Hubungkan Survei
+Sekaligus**. Pilihan tampilan kelompok tersedia 10, 50, dan Semua.
