@@ -181,3 +181,18 @@ Deploy tetap menggunakan `render.yaml`, branch `work`, dan disk `/var/data`.
 Setelah Render menandai deployment Live, muat ulang aplikasi dan login dengan
 akun lama. Data produksi dan URL publik harus diperiksa di layanan Render;
 keberhasilan uji lokal bukan bukti deployment publik telah selesai.
+
+## RAM pada Render Starter
+
+`/api/dashboard` mengirim JSON bertahap melalui `StreamingResponse`, sehingga
+FastAPI tidak membuat salinan rekursif seluruh data dan buffer JSON utuh.
+Satu lock per worker membatasi penyusunan/pengiriman snapshot besar secara
+bersamaan. Autentikasi dan cakupan hak akses tetap dijalankan sebelum data
+tersedia. Isi respons tetap kompatibel dengan frontend; Cache-Control no-store.
+Snapshot data sendiri masih dimuat di RAM, sehingga ini bukan batas memori
+absolut. Jika Render masih melaporkan OOM pada volume lebih besar, periksa
+Metrics dan pertimbangkan pagination server atau kapasitas RAM lebih besar.
+
+Uji sintetis 75.000 baris mahasiswa: alokasi puncak tambahan proses encoding
+JSON turun dari sekitar 40,56 MiB menjadi 0,57 MiB (tracemalloc; di luar memori
+data awal dan proses server). Angka ini bukan pengukuran RAM produksi.

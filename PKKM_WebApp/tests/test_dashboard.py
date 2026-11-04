@@ -28,6 +28,20 @@ class DashboardTests(unittest.TestCase):
                       ('testadmin',server.hash_password('Test-password-only-2026'),'Test Admin','admin'))
         self.headers = self.login('testadmin')
 
+    def test_dashboard_stream_preserves_json_and_protects_authenticated_data(self):
+        response=self.client.get('/api/dashboard',headers=self.headers)
+        self.assertEqual(response.status_code,200)
+        self.assertIn('application/json',response.headers['content-type'])
+        self.assertEqual(response.headers['cache-control'],'no-store')
+        self.assertEqual(response.json()['students'],[])
+        self.assertEqual(self.client.get('/api/dashboard').status_code,401)
+        from dashboard_api import stream_snapshot
+        import json
+        payload={'students':[{'nama':'Mahasiswa — Uji 中文','nim':str(i).zfill(12)} for i in range(2000)],'missing':None}
+        chunks=list(stream_snapshot(lambda:payload))
+        self.assertGreater(len(chunks),1)
+        self.assertEqual(json.loads(b''.join(chunks)),payload)
+
     def login(self, username, password='Test-password-only-2026'):
         response = self.client.post('/api/login',json={'username':username,'password':password})
         self.assertEqual(response.status_code,200,response.text)

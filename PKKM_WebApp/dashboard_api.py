@@ -4,12 +4,32 @@ import json
 import sqlite3
 import hashlib
 import unicodedata
+import threading
 from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from participant_matching import activity_index,match as match_pending_activity,group_key as pending_group_key
+
+# Only one full dashboard snapshot is assembled/encoded at a time per worker.
+SNAPSHOT_LOCK = threading.Lock()
+
+def stream_snapshot(build):
+    with SNAPSHOT_LOCK:
+        payload=build()
+        encoder=json.JSONEncoder(ensure_ascii=False,allow_nan=False,separators=(',',':'))
+        parts=[]
+        size=0
+        for fragment in encoder.iterencode(payload):
+            parts.append(fragment)
+            size+=len(fragment)
+            if size>=65536:
+                yield ''.join(parts).encode('utf-8')
+                parts=[]
+                size=0
+        if parts:yield ''.join(parts).encode('utf-8')
 
 SURVEY_SCHEMA = json.loads((Path(__file__).parent/'survey_schema.json').read_text(encoding='utf-8'))
 
@@ -262,8 +282,7 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
         result['skorSurvey'] = round(sum(scores)/len(scores), 2) if scores else (round(sum(legacy)/len(legacy), 2) if legacy else result.get('targetSurveyKepuasan'))
         return result
 
-    @app.get('/api/dashboard')
-    def snapshot(user=Depends(auth)):
+    def build_snapshot(user):
         with connect() as c:
             rows = c.execute('''SELECT a.*,e.skor_materi,e.skor_narasumber,e.skor_fasilitas,e.skor_dampak
                 FROM activities a LEFT JOIN evaluations e ON e.activity_id=a.id ORDER BY a.tanggal DESC,a.id DESC''').fetchall()
@@ -296,6 +315,12 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
                               role=r['dashboard_role'] or r['role'], status='Aktif' if r['active'] else 'Nonaktif')
                          for r in c.execute('SELECT * FROM users ORDER BY id')]
             return dict(activities=activities, students=students, masterStudents=master,pendingSurveys=pending,pendingParticipants=pending_participants,surveys=surveys, adminList=users, profile=profile(user))
+
+    @app.get('/api/dashboard')
+    def snapshot(user=Depends(auth)):
+        # Bypass FastAPI's recursive jsonable_encoder and whole-body JSON buffer.
+        # Large participant imports previously produced multiple copies in RAM.
+        return StreamingResponse(stream_snapshot(lambda:build_snapshot(user)),media_type='application/json',headers={'Cache-Control':'no-store'})
 
     def write_surveys(c, ident, surveys, user, notes=''):
         previous = c.execute('SELECT count(*) FROM survey_responses WHERE activity_id=?', (ident,)).fetchone()[0]
