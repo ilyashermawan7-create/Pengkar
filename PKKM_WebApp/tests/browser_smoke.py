@@ -557,7 +557,7 @@ def main():
                 expect(page.get_by_text('Peserta unik teridentifikasi (NIM)',exact=True).locator('..')).to_contain_text('0')
                 for label in ['Kegiatan Karakter','PPKPT']:
                     expect(page.get_by_text(label,exact=True).locator('..').locator('span').nth(1)).to_have_text('1')
-                expect(page.get_by_label('Rincian perhitungan kegiatan',exact=True)).to_contain_text('1 Karakter + 1 PPKPT + 0 Asrama = 2 kegiatan')
+                expect(page.get_by_label('Rincian perhitungan kegiatan',exact=True)).to_contain_text('1 Karakter + 1 PPKPT = 2 kegiatan')
                 page.get_by_role('button',name='Laporan',exact=False).first.click()
                 listing=page.get_by_role('region',name='Daftar kegiatan tersimpan',exact=True)
                 expect(listing.locator('tbody tr')).to_have_count(2)

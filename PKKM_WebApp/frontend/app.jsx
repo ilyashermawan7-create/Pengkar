@@ -131,7 +131,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const filteredStudents=students.filter(s=>visibleIds.has(s.activityId));
       const filteredSurveys=surveys.filter(s=>visibleIds.has(s.activityId));
       const years=[...new Set([...scopedActivities.map(a=>a.tahun).filter(Boolean),String(new Date().getFullYear())])].sort().reverse();
-      const categories=[...new Set(['Pengembangan Karakter','Pengkar Asrama','Wawasan Kebangsaan','Konseling','Kesehatan Mental','PPKPT',...scopedActivities.map(a=>a.kategori)])];
+      const categories=[...new Set(['Pengembangan Karakter','Wawasan Kebangsaan','Konseling','Kesehatan Mental','PPKPT',...scopedActivities.map(a=>a.kategori)])].filter(category=>activeGroup!=='pengkar'||!/asrama/i.test(category));
       const mean = average;
       const csi=calculateCsi(filteredSurveys);
       const surveyMetrics=csi.groups.map(group=>({label:group.label,divisor:group.divisor,val:group.percent===null?'—':group.percent.toFixed(1)+'%',skor:group.score===null?'—':group.score.toFixed(2),status:group.status}));
@@ -596,7 +596,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                     </div>
 
                     {/* BARIS SUB-METRIK PERSIS FOTO */}
-                    <div className={`grid grid-cols-2 sm:grid-cols-3 ${metrics.groups.lainnya?'md:grid-cols-6':'md:grid-cols-5'} gap-3 text-center`}>
+                    <div className={`grid grid-cols-2 sm:grid-cols-3 ${activeGroup==='pengkar'?(metrics.groups.lainnya?'md:grid-cols-5':'md:grid-cols-4'):(metrics.groups.lainnya?'md:grid-cols-6':'md:grid-cols-5')} gap-3 text-center`}>
                       <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
                         <span className="text-[11px] font-medium text-slate-400 block">Peserta unik teridentifikasi (NIM)</span>
                         <span className="text-xl font-bold text-slate-800 mt-0.5 block">
@@ -622,15 +622,15 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                           {totalKegiatanPPKPT}
                         </span>
                       </div>
-                      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
+                      {activeGroup!=='pengkar'&&<div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
                         <span className="text-[11px] font-medium text-slate-400 block">Kegiatan Asrama</span>
                         <span className="text-xl font-bold text-emerald-600 mt-0.5 block">
                           {totalKegiatanAsrama}
                         </span>
-                      </div>
+                      </div>}
                       {metrics.groups.lainnya>0&&<div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm"><span className="text-[11px] font-medium text-slate-400 block">Kegiatan Lainnya</span><span className="text-xl font-bold text-slate-800 mt-0.5 block">{metrics.groups.lainnya}</span></div>}
                     </div>
-                    <div aria-label="Rincian perhitungan kegiatan" className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 space-y-1"><p>Rekap: {totalKegiatanKarakter} Karakter + {totalKegiatanPPKPT} PPKPT + {totalKegiatanAsrama} Asrama{metrics.groups.lainnya?` + ${metrics.groups.lainnya} Lainnya`:''} = <b>{totalKegiatan} kegiatan</b>.</p><p>Setiap kegiatan dihitung satu kali, dengan prioritas PPKPT → Asrama → Karakter. Semua angka mengikuti filter aktif; rincian kelompok tersedia pada ekspor Excel.</p>{metrics.unknownParticipants>0&&<p>{metrics.unknownParticipants} kegiatan belum memiliki jumlah peserta; nilai kosong tidak dianggap sebagai data peserta terisi.</p>}</div>
+                    <div aria-label="Rincian perhitungan kegiatan" className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 space-y-1"><p>Rekap: {totalKegiatanKarakter} Karakter + {totalKegiatanPPKPT} PPKPT{activeGroup!=='pengkar'&&<> + {totalKegiatanAsrama} Asrama</>}{metrics.groups.lainnya?` + ${metrics.groups.lainnya} Lainnya`:''} = <b>{totalKegiatan} kegiatan</b>.</p><p>Setiap kegiatan dihitung satu kali, dengan prioritas {activeGroup==='pengkar'?'PPKPT → Karakter':'PPKPT → Asrama → Karakter'}. Semua angka mengikuti filter aktif; rincian kelompok tersedia pada ekspor Excel.</p>{metrics.unknownParticipants>0&&<p>{metrics.unknownParticipants} kegiatan belum memiliki jumlah peserta; nilai kosong tidak dianggap sebagai data peserta terisi.</p>}</div>
 
                     {/* DIAGRAM FAKULTAS & PIE KATEGORI (PERSIS GAMBAR) */}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
