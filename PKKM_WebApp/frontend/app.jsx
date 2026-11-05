@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import {readParticipants} from './spreadsheet.mjs';
 import StudentRecap from './StudentRecap.jsx';
 import MonthlyActivityTrend from './MonthlyActivityTrend.jsx';
+import AsramaCategoryReview from './AsramaCategoryReview.jsx';
 import {asramaCategories,asramaCategory} from './asramaCategories.mjs';
 import PrintReport from './PrintReport.jsx';
 import {downloadReportPdf} from './reportPdf.mjs';
@@ -735,6 +736,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                     </p>
                   </div>
 
+                  {activeGroup==='asrama'&&['admin','asrama'].includes(profileData.role)&&<AsramaCategoryReview api={api} reload={load} />}
                   {profileData.role==='verifier' && <section className="p-5 bg-amber-50 border border-amber-200 rounded-2xl space-y-3 text-xs"><h3 className="font-bold">Verifikasi / Impor Respons Survei</h3><label className="block">Kegiatan<select aria-label="Kegiatan survei" value={surveyActivityId} onChange={e=>{setSurveyActivityId(e.target.value);setSurveyRows([]);}} className="block w-full border rounded-xl p-3 mt-1"><option value="">Pilih kegiatan</option>{scopedActivities.map(a=><option key={a.id} value={a.id}>{a.namaKegiatan}</option>)}</select></label><input aria-label="Berkas survei verifikator" type="file" accept=".xlsx,.xls,.csv" onChange={handleImportSurveys} disabled={busy||!surveyActivityId}/><p>{surveyRows.length} respons siap disimpan.</p><button type="button" aria-label="Template Survey" title="20 pertanyaan asli. Lengkapi skor 1–5 sebelum mengimpor." onClick={downloadSurveyTemplate} className="border bg-white rounded-xl p-2 mr-2">Template Survey</button><button type="button" disabled={busy||!surveyRows.length} onClick={saveSurveyImport} className="bg-amber-600 text-white rounded-xl p-2">Simpan Respons Survei</button></section>}
                   {!canWrite && <p className="text-sm text-slate-500">Akun ini dapat membaca laporan. Input kegiatan tersedia untuk operator dan administrator.</p>}
                   {canWrite && <form onSubmit={handleSaveActivity} className="space-y-6 text-xs">

@@ -260,3 +260,24 @@ lama tanpa kategori tersebut tetap masuk total Asrama dan tren bulanan;
 jumlah yang belum terklasifikasi ditampilkan sebagai catatan. Form kegiatan
 Asrama baru memakai pilihan kategori yang sama (default Adaptif); kategori
 lama dipertahankan saat edit sampai pengguna memilih kategori baru.
+
+## Pengategorian data lama Asrama
+
+Saat startup, kategori lama yang belum baku disesuaikan melalui aturan konservatif
+pada asrama_classification.py: normalisasi ejaan dan kata kunci eksplisit dari
+judul, kemudian jenis/uraian bila judul belum memberi petunjuk. Hanya kegiatan
+Asrama yang diproses; PPK Tel-U dikecualikan. Kategori yang sudah baku tidak
+ditimpa. Riwayat kategori asli disimpan di asrama_category_history dan audit;
+proses berulang tidak mengubah ulang kegiatan yang sudah memiliki riwayat.
+Tidak ada perubahan pada nama, tanggal, peserta, atau respons survei.
+
+Judul tanpa petunjuk atau dengan beberapa asas dibiarkan menunggu pemeriksaan,
+bukan diisi Adaptif sebagai tebakan. Pada Grup Asrama → Laporan, Super Admin
+dan Operator Asrama dapat membuka Periksa Kategori Data Lama, melihat alasan
+saran, memilih kategori manual, kemudian menerapkan pilihan. Pagination 10/50/
+semua dan pencarian tersedia; tombol menerapkan seluruh pilihan lintas halaman.
+
+Endpoint GET/POST /api/dashboard/asrama/categories memeriksa role dan program,
+mempertahankan kategori yang sudah baku, menolak update bersamaan yang sudah
+berubah lewat expectedCategory, serta memvalidasi seluruh batch sebelum menulis.
+API ini tidak tersedia untuk Operator KKA, Pengkar, Viewer, maupun Verifikator.

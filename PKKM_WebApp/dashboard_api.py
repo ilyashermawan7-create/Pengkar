@@ -11,6 +11,7 @@ from typing import Literal
 from fastapi import Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from asrama_classification import canonical as dorm_category,suggest as suggest_dorm_category,is_dorm,categorize_legacy
 from participant_matching import activity_index,match as match_pending_activity,group_key as pending_group_key
 
 # Only one full dashboard snapshot is assembled/encoded at a time per worker.
@@ -95,6 +96,7 @@ def initialize(connect):
                 record_key TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), payload TEXT NOT NULL
             );
         ''')
+        categorize_legacy(c)
 
 
 class Input(BaseModel):
@@ -172,6 +174,15 @@ class DashboardActivity(Input):
     participants: list[Student] = Field(default_factory=list, max_length=10000)
     surveys: list[Survey] = Field(default_factory=list, max_length=10000)
 
+
+class DormCategoryAssignment(Input):
+    model_config = ConfigDict(allow_inf_nan=False,str_strip_whitespace=False)
+    activityId: int = Field(gt=0)
+    category: Literal['Adaptif','Spiritual','Akademik','Sosial']
+    expectedCategory: str = Field(max_length=100)
+
+class DormCategoryAssignments(Input):
+    items: list[DormCategoryAssignment] = Field(min_length=1,max_length=10000)
 
 class DashboardUser(Input):
     model_config = ConfigDict(allow_inf_nan=False, str_strip_whitespace=False)
@@ -696,6 +707,47 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             write_surveys(c, ident, data, user)
             audit(c,user,'import_survey','activity',ident)
         return {'ok':True}
+
+    def dorm_records(c,user):
+        if user['role'] not in ('admin','asrama'):
+            raise HTTPException(403,'Kategorisasi data lama Asrama hanya untuk Super Admin dan Operator Asrama')
+        records=[]
+        for row in c.execute('SELECT a.*,d.payload AS details FROM activities a LEFT JOIN activity_details d ON d.activity_id=a.id ORDER BY a.nama_kegiatan,a.id'):
+            details=json.loads(row['details']) if row['details'] else {}
+            if not visible(user,row['program']) or not is_dorm(row,details):continue
+            current=dorm_category(row['kategori'])
+            suggestion,reason=(current,'Kategori sudah diisi; ejaan dapat diseragamkan') if current else suggest_dorm_category(row['nama_kegiatan'],details.get('jenis',''),row['laporan'])
+            records.append({'id':row['id'],'name':row['nama_kegiatan'],'date':row['tanggal'],'current':row['kategori'],
+                            'suggestion':suggestion,'reason':reason,'complete':row['kategori'] in ('Adaptif','Spiritual','Akademik','Sosial')})
+        return records
+
+    @app.get('/api/dashboard/asrama/categories')
+    def preview_dorm_categories(user=Depends(auth)):
+        with connect() as c:records=dorm_records(c,user)
+        return {'items':records,'total':len(records),'complete':sum(row['complete'] for row in records)}
+
+    @app.post('/api/dashboard/asrama/categories')
+    def apply_dorm_categories(data:DormCategoryAssignments,user=Depends(auth)):
+        with connect() as c:
+            c.execute('BEGIN IMMEDIATE')
+            allowed={row['id']:row for row in dorm_records(c,user)}
+            if len({item.activityId for item in data.items})!=len(data.items):raise HTTPException(422,'ID kegiatan berulang dalam permintaan')
+            # Validate the entire batch before updating any record.
+            for item in data.items:
+                row=allowed.get(item.activityId)
+                if not row:raise HTTPException(403,'Kegiatan bukan Asrama atau di luar hak akses')
+                if row['current']!=item.expectedCategory:raise HTTPException(409,'Kategori berubah sejak diperiksa. Muat ulang daftar terlebih dahulu')
+                if row['complete'] and row['current']!=item.category:raise HTTPException(409,'Kategori yang sudah lengkap tidak ditimpa melalui kategorisasi data lama')
+            c.execute('CREATE TABLE IF NOT EXISTS asrama_category_history(id INTEGER PRIMARY KEY,activity_id INTEGER NOT NULL REFERENCES activities(id) ON DELETE CASCADE,old_category TEXT NOT NULL,new_category TEXT NOT NULL,changed_by INTEGER,at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)')
+            updated=0
+            for item in data.items:
+                row=allowed[item.activityId]
+                if row['current']==item.category:continue
+                c.execute('INSERT INTO asrama_category_history(activity_id,old_category,new_category,changed_by) VALUES(?,?,?,?)',(item.activityId,row['current'],item.category,user['id']))
+                c.execute('UPDATE activities SET kategori=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',(item.category,item.activityId))
+                audit(c,user,'categorize_asrama','activity',item.activityId)
+                updated+=1
+        return {'updated':updated}
 
     @app.post('/api/dashboard/users', status_code=201)
     def create_user(data: DashboardUser, user=Depends(auth)):

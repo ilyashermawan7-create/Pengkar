@@ -678,6 +678,36 @@ def main():
                     expect(page.get_by_role('region',name='Survei kepuasan 20 pertanyaan',exact=True)).to_have_count(0)
                     expect(page.get_by_role('region',name='Rekap mahasiswa tersimpan',exact=True)).to_have_count(0)
                 print('PASS: monthly chart in all groups, duplicate names counted once per month, year/quarter filters and empty state')
+                page.get_by_role('button',name='Log Out',exact=False).click()
+                page.get_by_label('Username',exact=True).fill('browseradminbaru')
+                page.get_by_label('Password',exact=True).fill(new_password)
+                page.get_by_role('button',name='Login',exact=True).click()
+                expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
+                category_auth={'Authorization':'Bearer '+page.evaluate("sessionStorage.getItem('pkkm_token')")}
+                category_ids={}
+                for name,category in [('Check-in Asrama Lama','Adaptif'),('Kegiatan Iftar SR Lama','Spiritual'),('Workshop Strategi Belajar Lama','Akademik'),('Dorm Olympic Lama','Sosial'),('Dorm Class Lama','Akademik')]:
+                    result=page.request.post(url+'/api/dashboard/activities',headers=category_auth,data={'namaKegiatan':name,'tanggal':'2032-01-01','program':'Asrama','kategori':'Pengkar Asrama'})
+                    assert result.status==201,result.text()
+                    category_ids[result.json()['id']]=(name,category)
+                page.reload()
+                page.get_by_label('Grup Pengguna',exact=True).select_option('asrama')
+                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                review=page.get_by_role('region',name='Kategorisasi data lama Asrama',exact=True)
+                review.get_by_role('button',name='Periksa Kategori Data Lama',exact=True).click()
+                expect(review).to_contain_text('kategori siap diterapkan')
+                for ident,(name,category) in category_ids.items():
+                    choice=review.get_by_label('Kategori tujuan kegiatan '+str(ident),exact=True)
+                    if name=='Dorm Class Lama':
+                        expect(choice).to_have_value('')
+                        choice.select_option(category)
+                    else:expect(choice).to_have_value(category)
+                review.get_by_role('button',name='Terapkan 6 Kategori Asrama',exact=True).click()
+                expect(review).to_contain_text('6 kegiatan berhasil dikategorikan')
+                snapshot=page.request.get(url+'/api/dashboard',headers=category_auth).json()
+                for ident,(_,category) in category_ids.items():
+                    assert next(activity for activity in snapshot['activities'] if activity['id']==ident)['kategori']==category
+                expect(review).to_contain_text('1 perlu diperiksa')
+                print('PASS: review old Asrama categories, preserve unknown titles for explicit choice, apply suggestions and manual assignments')
                 assert not errors, errors
                 print('PASS: mobile navigation; no browser JavaScript errors')
                 browser.close()

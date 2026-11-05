@@ -126,6 +126,83 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(student['fakultas'],'FIF')
             self.assertEqual(student['kampus'],'Bandung')
 
+    def test_startup_categorizes_only_clear_dorm_records_once_with_history(self):
+        target=self.create(self.activity(namaKegiatan='Kegiatan Iftar SR',program='Asrama',kategori='Pengkar Asrama'))
+        ambiguous=self.create(self.activity(namaKegiatan='Dorm Class',program='Asrama',kategori='Pengkar Asrama'))
+        correct=self.create(self.activity(namaKegiatan='Olahraga sudah ditinjau',program='Asrama',kategori='Adaptif'))
+        before=self.snapshot()
+        initialize(server.connect)
+        initialize(server.connect)
+        after=self.snapshot()
+        categories={row['id']:row['kategori'] for row in after['activities']}
+        self.assertEqual(categories[target],'Spiritual')
+        self.assertEqual(categories[ambiguous],'Pengkar Asrama')
+        self.assertEqual(categories[correct],'Adaptif')
+        self.assertEqual(after['students'],before['students'])
+        self.assertEqual(after['surveys'],before['surveys'])
+        with server.connect() as c:
+            self.assertEqual(c.execute('SELECT count(*) FROM asrama_category_history WHERE activity_id=?',(target,)).fetchone()[0],1)
+            self.assertEqual(c.execute('SELECT old_category FROM asrama_category_history WHERE activity_id=?',(target,)).fetchone()[0],'Pengkar Asrama')
+
+    def test_dorm_category_preview_uses_conservative_rules_and_keeps_correct_categories(self):
+        fixtures=[('Check-in Asrama','Adaptif'),('Kegiatan Iftar SR','Spiritual'),('Workshop Strategi Belajar','Akademik'),('Dorm Olympic','Sosial'),('Dorm Class',None),('Iftar dan Olahraga',None)]
+        expected={}
+        for name,category in fixtures:
+            ident=self.create(self.activity(namaKegiatan=name,program='Asrama',kategori='Pengkar Asrama'))
+            expected[ident]=category
+        kept=self.create(self.activity(namaKegiatan='Olahraga sudah ditinjau',program='Asrama',kategori='Spiritual'))
+        other=self.create(self.activity(namaKegiatan='Webinar umum'))
+        preview=self.client.get('/api/dashboard/asrama/categories',headers=self.headers).json()
+        items={row['id']:row for row in preview['items']}
+        self.assertNotIn(other,items)
+        for ident,category in expected.items():self.assertEqual(items[ident]['suggestion'],category)
+        self.assertTrue(items[kept]['complete'])
+        self.assertEqual(items[kept]['suggestion'],'Spiritual')
+        with server.connect() as c:
+            self.assertEqual(c.execute('SELECT kategori FROM activities WHERE id=?',(next(iter(expected)),)).fetchone()['kategori'],'Pengkar Asrama')
+
+    def test_dorm_category_batch_updates_only_category_with_history_and_preserves_responses(self):
+        ident=self.create(self.activity(namaKegiatan='Kegiatan Iftar SR',program='Asrama',kategori='Spritual'))
+        before=self.snapshot()
+        body={'items':[{'activityId':ident,'expectedCategory':'Spritual','category':'Spiritual'}]}
+        response=self.client.post('/api/dashboard/asrama/categories',headers=self.headers,json=body)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()['updated'],1)
+        after=self.snapshot()
+        self.assertEqual(after['students'],before['students'])
+        self.assertEqual(after['surveys'],before['surveys'])
+        self.assertEqual(after['activities'][0]['kategori'],'Spiritual')
+        with server.connect() as c:
+            history=c.execute('SELECT * FROM asrama_category_history WHERE activity_id=?',(ident,)).fetchone()
+            self.assertEqual((history['old_category'],history['new_category']),('Spritual','Spiritual'))
+        body['items'][0]['expectedCategory']='Spiritual'
+        self.assertEqual(self.client.post('/api/dashboard/asrama/categories',headers=self.headers,json=body).json()['updated'],0)
+
+    def test_dorm_category_batch_rejects_stale_or_correct_categories_atomically(self):
+        first=self.create(self.activity(namaKegiatan='First',program='Asrama',kategori='Lama'))
+        second=self.create(self.activity(namaKegiatan='Second',program='Asrama',kategori='Sosial'))
+        body={'items':[{'activityId':first,'expectedCategory':'Lama','category':'Adaptif'},{'activityId':second,'expectedCategory':'Lama','category':'Akademik'}]}
+        response=self.client.post('/api/dashboard/asrama/categories',headers=self.headers,json=body)
+        self.assertEqual(response.status_code,409)
+        self.assertEqual(next(row for row in self.snapshot()['activities'] if row['id']==first)['kategori'],'Lama')
+        body['items'][1]['expectedCategory']='Sosial'
+        self.assertEqual(self.client.post('/api/dashboard/asrama/categories',headers=self.headers,json=body).status_code,409)
+        body['items']=[body['items'][0],body['items'][0]]
+        self.assertEqual(self.client.post('/api/dashboard/asrama/categories',headers=self.headers,json=body).status_code,422)
+
+    def test_dorm_category_permissions_and_program_scope(self):
+        target=self.create(self.activity(namaKegiatan='Iftar',program='Asrama',kategori='Lama'))
+        other=self.create(self.activity(namaKegiatan='SR Camp',kategori='Lama'))
+        _,asrama=self.new_user('categoryasrama','asrama')
+        preview=self.client.get('/api/dashboard/asrama/categories',headers=asrama).json()
+        self.assertEqual([row['id'] for row in preview['items']],[target])
+        response=self.client.post('/api/dashboard/asrama/categories',headers=asrama,json={'items':[{'activityId':other,'expectedCategory':'Lama','category':'Sosial'}]})
+        self.assertEqual(response.status_code,403)
+        for role in ('operator','viewer','verifier','pengkar'):
+            _,headers=self.new_user('category'+role,role)
+            self.assertEqual(self.client.get('/api/dashboard/asrama/categories',headers=headers).status_code,403)
+            self.assertEqual(self.client.post('/api/dashboard/asrama/categories',headers=headers,json={'items':[{'activityId':target,'expectedCategory':'Lama','category':'Spiritual'}]}).status_code,403)
+
     def test_navigation_groups_preserve_legacy_data_and_round_trip(self):
         import json
         legacy=self.create()
