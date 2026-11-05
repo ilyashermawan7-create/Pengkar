@@ -5,7 +5,7 @@ import {average} from './statistics.mjs';
 import {calculateCsi,csiMethod,questionDivisor} from './csi.mjs';
 
 let fontPromise;
-async function reportFont() {
+export async function reportFont() {
   if (!fontPromise) fontPromise=(async()=>{
     const response=await fetch('/static/fonts/report-sans.ttf');
     if(!response.ok)throw Error('Font laporan gagal dimuat. Muat ulang aplikasi dan coba lagi.');

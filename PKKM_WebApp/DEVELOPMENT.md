@@ -386,3 +386,6 @@ ketika isinya tetap sama. Pemasangan tidak mengubah kasus atau data pengguna.
 
 ### Operator PPKPT dan identitas Telkom
 Akun dengan dashboard_role verifier dimigrasikan otomatis menjadi ppkpt (tanpa mengubah kredensial); API menerima verifier sebagai alias kompatibilitas. Operator PPKPT mengelola kasus PPK Tel-U, tetapi tidak mengubah kegiatan, survei, pengguna atau logo. Login membuka grup Dashboard keseluruhan. Banner dashboard dan login memakai dua foto asli dalam static/images/telu-*.jpg dari Background.rar, dengan lapisan warna merah Telkom.
+
+### Ekspor dashboard PDF
+Tombol Ekspor PDF Dashboard tersedia pada Overview, Pengkar, Asrama, dan PPK Tel-U. dashboardPdf.mjs mengambil snapshot ringkasan yang terlihat, nilai filter aktif, dan canvas grafik dari main dashboard saja. Tabel mengikuti halaman yang tampil; formulir laporan dan sidebar tidak diekspor. PDF dibuat di browser dengan jsPDF dan font laporan lokal, tanpa window.print atau permintaan rincian data tambahan.

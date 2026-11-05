@@ -9,6 +9,7 @@ import MonthlyActivityTrend from './MonthlyActivityTrend.jsx';
 import AsramaCategoryReview from './AsramaCategoryReview.jsx';
 import PpktDashboard from './PpktDashboard.jsx';
 import TeluBanner from './TeluBanner.jsx';
+import DashboardPdfButton from './DashboardPdfButton.jsx';
 import {asramaCategories,asramaCategory} from './asramaCategories.mjs';
 import {downloadReportPdf} from './reportPdf.mjs';
 import MigrationPanel from './MigrationPanel.jsx';
@@ -539,6 +540,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {activeNav === 'dashboard' && activeGroup!=='ppk-telu' && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
                 {statsLoading&&!fullDataLoaded&&<p role="status" className="text-sm text-slate-500">Memuat ringkasan peserta dan survei…</p>}
+                <DashboardPdfButton title={activeGroup==='overview'?'Dashboard Keseluruhan':'Dashboard '+groupLabel} disabled={statsLoading||busy} />
                 <TeluBanner group={activeGroup} title={activeGroup==='overview'?'Dashboard Keseluruhan':'Dashboard '+groupLabel} subtitle={activeGroup==='overview'?'Pantau kegiatan Pengembangan Karakter, PPKPT, dan Asrama dalam satu ringkasan.':'Ringkasan kegiatan, partisipasi mahasiswa, dan evaluasi '+groupLabel+'.'} />
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

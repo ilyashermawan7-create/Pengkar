@@ -688,6 +688,14 @@ def main():
                 expect(page.get_by_text('Logo Satgas PPKPT berhasil diperbarui.',exact=True)).to_be_visible()
                 expect(page.get_by_alt_text('Logo Satgas PPKPT',exact=True)).to_be_visible()
                 assert page.get_by_alt_text('Logo Satgas PPKPT',exact=True).evaluate('(image)=>image.complete&&image.naturalWidth>0')
+                page.get_by_role('button',name='Dashboard',exact=False).first.click()
+                expect(page.get_by_text('Total Laporan',exact=True)).to_be_visible()
+                with page.expect_download() as exported:
+                    page.get_by_role('button',name='Ekspor PDF Dashboard',exact=True).click()
+                pdf_path=Path(tmp)/'dashboard-ppkt.pdf'
+                exported.value.save_as(pdf_path)
+                pdf_text=' '.join(p.extract_text() for p in PdfReader(str(pdf_path)).pages)
+                assert 'Dashboard PPK Tel-U' in pdf_text and 'total laporan' in pdf_text.lower()
                 print('PASS: executive PPKPT layout, faculty filter, protected prodi distribution, logo upload')
                 print('PASS: PPK Tel-U case dashboard, original column import, duplicate protection, case editing and year filters')
                 page.reload()
@@ -732,6 +740,16 @@ def main():
                 for group in ['overview','pengkar','asrama']:
                     page.get_by_label('Grup Pengguna',exact=True).select_option(group)
                     if group=='pengkar':page.get_by_role('button',name='Reset Filter',exact=True).click()
+                    with page.expect_download() as exported:
+                        page.get_by_role('button',name='Ekspor PDF Dashboard',exact=True).click()
+                    pdf_path=Path(tmp)/('dashboard-'+group+'.pdf')
+                    exported.value.save_as(pdf_path)
+                    reader=PdfReader(str(pdf_path))
+                    pdf_text=' '.join(p.extract_text() for p in reader.pages)
+                    assert 'Total Kegiatan' in pdf_text and 'Total Peserta' in pdf_text
+                    assert 'PKKM Sign In' not in pdf_text and 'Input Kegiatan Pengembangan Karakter (16 Field Master)' not in pdf_text
+                    assert len(reader.pages)>0
+
                     expect(page.get_by_role('region',name='Tren kegiatan bulanan',exact=True)).to_be_visible()
                     expect(page.get_by_role('region',name='Survei kepuasan 20 pertanyaan',exact=True)).to_have_count(0)
                     expect(page.get_by_role('region',name='Rekap mahasiswa tersimpan',exact=True)).to_have_count(0)
