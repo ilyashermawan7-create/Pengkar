@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 import {readParticipants} from './spreadsheet.mjs';
 import StudentRecap from './StudentRecap.jsx';
 import MonthlyActivityTrend from './MonthlyActivityTrend.jsx';
+import {asramaCategories,asramaCategory} from './asramaCategories.mjs';
 import PrintReport from './PrintReport.jsx';
 import {downloadReportPdf} from './reportPdf.mjs';
 import MigrationPanel from './MigrationPanel.jsx';
@@ -87,7 +88,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         const date = new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Jakarta'});
         return {navigationGroup:activeGroup,namaKegiatan:'',tanggal:date,tahun:date.slice(0,4),triwulan:'TW'+(Math.floor((Number(date.slice(5,7))-1)/3)+1),
           program:activeGroup==='asrama'?'Asrama':'Pengembangan Karakter',jumlahPeserta:'',linkEvident:'',tempat:'',unitKerjasama:'',urusan:activeGroup==='asrama'?'Asrama':activeGroup==='ppk-telu'?'PPK Tel-U':'Pengembangan karakter',
-          kategori:activeGroup==='asrama'?'Pengkar Asrama':activeGroup==='ppk-telu'?'PPK Tel-U':'Pengembangan Karakter',jenis:activeGroup==='pengkar'?'Pengembangan Karakter':groupLabel,pembicara:'',honor:'',takPanitia:10,takPeserta:5,laporan:'',
+          kategori:activeGroup==='asrama'?'Adaptif':activeGroup==='ppk-telu'?'PPK Tel-U':'Pengembangan Karakter',jenis:activeGroup==='pengkar'?'Pengembangan Karakter':groupLabel,pembicara:'',honor:'',takPanitia:10,takPeserta:5,laporan:'',
           targetSurveyKepuasan:'',evaluasiMateri:'',evaluasiNarasumber:'',evaluasiFasilitas:'',evaluasiDampak:'',catatanSurvey:''};
       };
       const [activityForm, setActivityForm] = useState(freshForm);
@@ -112,14 +113,14 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         if (!token) return;
         load(token).then(()=>setIsLoggedIn(true)).catch(error=>setLoginError(error.message));
       }, []);
-      useEffect(()=>{if(!editingId)setActivityForm({...freshForm(),...(profileData.role==='asrama'?{program:'Asrama',kategori:'Pengkar Asrama',urusan:'Asrama'}:{})});},[profileData.role,activeGroup]);
+      useEffect(()=>{if(!editingId)setActivityForm({...freshForm(),...(profileData.role==='asrama'?{program:'Asrama',kategori:'Adaptif',urusan:'Asrama'}:{})});},[profileData.role,activeGroup]);
       const scopedActivities=groupActivities(activities,activeGroup);
       const filteredActivities = scopedActivities.filter(act => {
         const query=searchNim.trim().toLowerCase();
         return (!query || act.namaKegiatan.toLowerCase().includes(query) || students.some(s=>s.activityId===act.id && (s.nim.includes(query)||s.nama.toLowerCase().includes(query))))
           && (filterYear==='Semua Tahun'||act.tahun===filterYear)
           && (filterTw==='Semua Triwulan'||act.triwulan===filterTw)
-          && (filterCategory==='Semua Kategori'||act.kategori===filterCategory);
+          && (filterCategory==='Semua Kategori'||(activeGroup==='asrama'?asramaCategory(act.kategori):act.kategori)===filterCategory);
       });
       useEffect(()=>{setActivityPage(1);},[searchNim,filterYear,filterTw,filterCategory,activities.length,activeGroup]);
       const activityLimit=activityPageSize==='all'?Math.max(1,filteredActivities.length):Number(activityPageSize);
@@ -131,7 +132,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const filteredStudents=students.filter(s=>visibleIds.has(s.activityId));
       const filteredSurveys=surveys.filter(s=>visibleIds.has(s.activityId));
       const years=[...new Set([...scopedActivities.map(a=>a.tahun).filter(Boolean),String(new Date().getFullYear())])].sort().reverse();
-      const categories=[...new Set(['Pengembangan Karakter','Wawasan Kebangsaan','Konseling','Kesehatan Mental','PPKPT',...scopedActivities.map(a=>a.kategori)])].filter(category=>activeGroup!=='pengkar'||!/asrama/i.test(category));
+      const categories=activeGroup==='asrama'?asramaCategories:[...new Set(['Pengembangan Karakter','Wawasan Kebangsaan','Konseling','Kesehatan Mental','PPKPT',...scopedActivities.map(a=>a.kategori)])].filter(category=>activeGroup!=='pengkar'||!/asrama/i.test(category));
       const mean = average;
       const csi=calculateCsi(filteredSurveys);
       const surveyMetrics=csi.groups.map(group=>({label:group.label,divisor:group.divisor,val:group.percent===null?'—':group.percent.toFixed(1)+'%',skor:group.score===null?'—':group.score.toFixed(2),status:group.status}));
@@ -146,10 +147,11 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       useEffect(() => {
         if (!isLoggedIn || activeNav !== 'dashboard') return;
         const palette=['#dc2626','#991b1b','#334155','#eab308','#06b6d4','#15803d','#2563eb'];
-        const labels=[...new Set(filteredActivities.map(a=>a.kategori))];
+        const chartCategory=activity=>activeGroup==='asrama'?asramaCategory(activity.kategori):activity.kategori;
+        const labels=activeGroup==='asrama'?asramaCategories:[...new Set(filteredActivities.map(a=>a.kategori))];
         const chartYears=[...new Set(filteredActivities.map(a=>a.tahun||'Belum diisi'))].sort();
-        if (pieChartRef.current) pieInstance.current=new Chart(pieChartRef.current,{type:'pie',data:{labels,datasets:[{data:labels.map(label=>filteredActivities.filter(a=>a.kategori===label).length),backgroundColor:palette,borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{position:'right',labels:{boxWidth:10,font:{size:9}}}}}});
-        if (barChartRef.current) barInstance.current=new Chart(barChartRef.current,{type:'bar',data:{labels:chartYears,datasets:labels.map((label,index)=>({label,data:chartYears.map(year=>filteredActivities.filter(a=>(a.tahun||'Belum diisi')===year&&a.kategori===label).length),backgroundColor:palette[index%palette.length]}))},options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{y:{beginAtZero:true,ticks:{precision:0}},x:{grid:{display:false}}},plugins:{legend:{position:'top',labels:{boxWidth:10,font:{size:10}}}}}});
+        if (pieChartRef.current) pieInstance.current=new Chart(pieChartRef.current,{type:'pie',data:{labels,datasets:[{data:labels.map(label=>filteredActivities.filter(a=>chartCategory(a)===label).length),backgroundColor:palette,borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{position:'right',labels:{boxWidth:10,font:{size:9}}}}}});
+        if (barChartRef.current) barInstance.current=new Chart(barChartRef.current,{type:'bar',data:{labels:chartYears,datasets:labels.map((label,index)=>({label,data:chartYears.map(year=>filteredActivities.filter(a=>(a.tahun||'Belum diisi')===year&&chartCategory(a)===label).length),backgroundColor:palette[index%palette.length]}))},options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{y:{beginAtZero:true,ticks:{precision:0}},x:{grid:{display:false}}},plugins:{legend:{position:'top',labels:{boxWidth:10,font:{size:10}}}}}});
         return ()=>{pieInstance.current?.destroy();barInstance.current?.destroy();};
       }, [isLoggedIn,activeNav,activeGroup,activities,students,searchNim,filterYear,filterTw,filterCategory]);
       const handleInitialLogin = async (e) => {
@@ -221,7 +223,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
           setEditingId(null);setParticipantRows([]);setSurveyRows([]);setImportedParticipantFile(null);setParticipantImportError('');setSurveyActivityId('');setNotice('');
         }
       };
-      const resetActivity = () => {setEditingId(null);setActivityForm({...freshForm(),...(profileData.role==='asrama'?{program:'Asrama',kategori:'Pengkar Asrama',urusan:'Asrama'}:{})});setParticipantRows([]);setSurveyRows([]);setImportedParticipantFile(null);setParticipantImportError('');};
+      const resetActivity = () => {setEditingId(null);setActivityForm({...freshForm(),...(profileData.role==='asrama'?{program:'Asrama',kategori:'Adaptif',urusan:'Asrama'}:{})});setParticipantRows([]);setSurveyRows([]);setImportedParticipantFile(null);setParticipantImportError('');};
       const editActivity = (act) => {
         setEditingId(act.id);setActivityForm({...freshForm(),...act,tanggal:act.tanggal||'',jumlahPeserta:act.jumlahPeserta??'',takPanitia:act.takPanitia??'',takPeserta:act.takPeserta??'',targetSurveyKepuasan:act.targetSurveyKepuasan??''});
         setParticipantRows(students.filter(s=>s.activityId===act.id&&s.nim));setSurveyRows(surveys.filter(s=>s.activityId===act.id));
@@ -596,7 +598,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                     </div>
 
                     {/* BARIS SUB-METRIK PERSIS FOTO */}
-                    <div className={`grid grid-cols-2 sm:grid-cols-3 ${activeGroup==='pengkar'?(metrics.groups.lainnya?'md:grid-cols-5':'md:grid-cols-4'):(metrics.groups.lainnya?'md:grid-cols-6':'md:grid-cols-5')} gap-3 text-center`}>
+                    <div className={`grid grid-cols-2 sm:grid-cols-3 ${activeGroup==='asrama'?'md:grid-cols-3':activeGroup==='pengkar'?(metrics.groups.lainnya?'md:grid-cols-5':'md:grid-cols-4'):(metrics.groups.lainnya?'md:grid-cols-6':'md:grid-cols-5')} gap-3 text-center`}>
                       <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
                         <span className="text-[11px] font-medium text-slate-400 block">Peserta unik teridentifikasi (NIM)</span>
                         <span className="text-xl font-bold text-slate-800 mt-0.5 block">
@@ -610,27 +612,27 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                         </span>
                         <span className="text-[10px] text-slate-400 block mt-1">Total Peserta ÷ 45.000 × 100%</span>
                       </div>
-                      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                      {activeGroup!=='asrama'&&<div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
                         <span className="text-[11px] font-medium text-slate-400 block">Kegiatan Karakter</span>
                         <span className="text-xl font-bold text-[#D71920] mt-0.5 block">
                           {totalKegiatanKarakter}
                         </span>
-                      </div>
-                      <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
+                      </div>}
+                      {activeGroup!=='asrama'&&<div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm">
                         <span className="text-[11px] font-medium text-slate-400 block">PPKPT</span>
                         <span className="text-xl font-bold text-blue-600 mt-0.5 block">
                           {totalKegiatanPPKPT}
                         </span>
-                      </div>
+                      </div>}
                       {activeGroup!=='pengkar'&&<div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm col-span-2 sm:col-span-1">
                         <span className="text-[11px] font-medium text-slate-400 block">Kegiatan Asrama</span>
                         <span className="text-xl font-bold text-emerald-600 mt-0.5 block">
-                          {totalKegiatanAsrama}
+                          {activeGroup==='asrama'?totalKegiatan:totalKegiatanAsrama}
                         </span>
                       </div>}
-                      {metrics.groups.lainnya>0&&<div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm"><span className="text-[11px] font-medium text-slate-400 block">Kegiatan Lainnya</span><span className="text-xl font-bold text-slate-800 mt-0.5 block">{metrics.groups.lainnya}</span></div>}
+                      {activeGroup!=='asrama'&&metrics.groups.lainnya>0&&<div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm"><span className="text-[11px] font-medium text-slate-400 block">Kegiatan Lainnya</span><span className="text-xl font-bold text-slate-800 mt-0.5 block">{metrics.groups.lainnya}</span></div>}
                     </div>
-                    <div aria-label="Rincian perhitungan kegiatan" className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 space-y-1"><p>Rekap: {totalKegiatanKarakter} Karakter + {totalKegiatanPPKPT} PPKPT{activeGroup!=='pengkar'&&<> + {totalKegiatanAsrama} Asrama</>}{metrics.groups.lainnya?` + ${metrics.groups.lainnya} Lainnya`:''} = <b>{totalKegiatan} kegiatan</b>.</p><p>Setiap kegiatan dihitung satu kali, dengan prioritas {activeGroup==='pengkar'?'PPKPT → Karakter':'PPKPT → Asrama → Karakter'}. Semua angka mengikuti filter aktif; rincian kelompok tersedia pada ekspor Excel.</p>{metrics.unknownParticipants>0&&<p>{metrics.unknownParticipants} kegiatan belum memiliki jumlah peserta; nilai kosong tidak dianggap sebagai data peserta terisi.</p>}</div>
+                    <div aria-label="Rincian perhitungan kegiatan" className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 space-y-1"><p>Rekap: {activeGroup==='asrama'?<>{totalKegiatan} kegiatan Asrama</>:<>{totalKegiatanKarakter} Karakter + {totalKegiatanPPKPT} PPKPT{activeGroup!=='pengkar'&&<> + {totalKegiatanAsrama} Asrama</>}{metrics.groups.lainnya?` + ${metrics.groups.lainnya} Lainnya`:''} = <b>{totalKegiatan} kegiatan</b></>}.</p><p>Setiap kegiatan dihitung satu kali, {activeGroup==='asrama'?'sesuai kegiatan Asrama yang lolos filter.':<>dengan prioritas {activeGroup==='pengkar'?'PPKPT → Karakter':'PPKPT → Asrama → Karakter'}.</>} Semua angka mengikuti filter aktif; rincian kelompok tersedia pada ekspor Excel.</p>{metrics.unknownParticipants>0&&<p>{metrics.unknownParticipants} kegiatan belum memiliki jumlah peserta; nilai kosong tidak dianggap sebagai data peserta terisi.</p>}</div>
 
                     {/* DIAGRAM FAKULTAS & PIE KATEGORI (PERSIS GAMBAR) */}
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
@@ -649,7 +651,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                       </div>
 
                       <div className="md:col-span-5 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
-                        <span className="text-xs font-bold text-slate-800 mb-2">Kategori Kegiatan</span>
+                        <span className="text-xs font-bold text-slate-800 mb-2">Kategori Kegiatan</span>{activeGroup==='asrama'&&filteredActivities.some(activity=>!asramaCategory(activity.kategori))&&<p className="text-xs text-amber-800 mb-2">{filteredActivities.filter(activity=>!asramaCategory(activity.kategori)).length} kegiatan belum berkategori Adaptif, Spiritual, Akademik, atau Sosial. Tetap masuk total kegiatan, tetapi belum masuk grafik kategori dan tahunan per kategori.</p>}
                         <div className="relative h-48 w-full">
                           <canvas ref={pieChartRef}></canvas>
                         </div>
@@ -882,7 +884,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                           onChange={(e) => setActivityForm({ ...activityForm, kategori: e.target.value })}
                           className="w-full border border-slate-300 rounded-xl p-3 outline-none focus:border-[#D71920] bg-white font-bold text-sm"
                         >
-                          {categories.map(category=><option key={category} value={category}>{category}</option>)}
+                          {activeGroup==='asrama'&&activityForm.kategori&&!categories.includes(activityForm.kategori)&&<option value={activityForm.kategori}>Kategori lama: {activityForm.kategori}</option>}{categories.map(category=><option key={category} value={category}>{category}</option>)}
                         </select>
                       </div>
 

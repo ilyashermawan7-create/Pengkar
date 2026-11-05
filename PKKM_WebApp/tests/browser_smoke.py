@@ -589,7 +589,7 @@ def main():
                 assert len(stored)==1573
                 assert stored[0]['answers']==[None,5]+[None]*18 and stored[0]['saran']=='Saran asli'
                 print('PASS: auto-connect 1574 surveys across batches, skip duplicates, preserve original partial answers')
-                result=page.request.post(url+'/api/dashboard/activities',headers=auth,data={'namaKegiatan':'Kegiatan Grup Asrama','tanggal':'2026-11-04','program':'Asrama','navigationGroup':'asrama','surveys':[{'nim':'890000000000','answers':[2]*20}]})
+                result=page.request.post(url+'/api/dashboard/activities',headers=auth,data={'namaKegiatan':'Kegiatan Grup Asrama','tanggal':'2026-11-04','program':'Asrama','kategori':'Adaktif','navigationGroup':'asrama','surveys':[{'nim':'890000000000','answers':[2]*20}]})
                 assert result.status==201,result.text()
                 page.reload()
                 page.get_by_label('Grup Pengguna',exact=True).select_option('overview')
@@ -612,6 +612,12 @@ def main():
                 expect(page.get_by_role('region',name='Survei kepuasan 20 pertanyaan',exact=True)).to_have_count(0)
                 expect(page.get_by_text('CSI Bobot Setara',exact=True).first.locator('..')).to_contain_text('47.50%')
                 expect(page.get_by_text('Total Kegiatan',exact=True).locator('..').locator('span').nth(1)).to_have_text('2')
+                assert page.get_by_label('Kategori',exact=True).locator('option').evaluate_all('(options)=>options.map(option=>option.value)')==['Semua Kategori','Adaptif','Spiritual','Akademik','Sosial']
+                expect(page.get_by_text('Kegiatan Karakter',exact=True)).to_have_count(0)
+                expect(page.get_by_text('PPKPT',exact=True)).to_have_count(0)
+                page.get_by_label('Kategori',exact=True).select_option('Adaptif')
+                expect(page.get_by_text('Total Kegiatan',exact=True).locator('..').locator('span').nth(1)).to_have_text('1')
+                page.get_by_label('Kategori',exact=True).select_option('Semua Kategori')
                 page.get_by_role('button',name='Laporan',exact=False).first.click()
                 expect(page.get_by_text('Input Kegiatan Asrama',exact=True)).to_be_visible()
                 listing=page.get_by_role('region',name='Daftar kegiatan tersimpan',exact=True)

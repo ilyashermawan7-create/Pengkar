@@ -252,3 +252,11 @@ Dashboard seluruh grup tidak menampilkan tabel Survei Kepuasan Kegiatan —
 Pertanyaan Asli dan Rekap Data Mahasiswa. Ringkasan analisis/CSI serta grafik
 masih tampil. Kedua komponen detail tetap tersedia di Laporan sesuai role;
 penyembunyian dashboard tidak menghapus data atau mengubah hak akses.
+
+Dashboard Asrama menyembunyikan kartu Kegiatan Karakter dan PPKPT. Filter
+kategori dan grafik per kategori memakai Adaptif, Spiritual, Akademik, Sosial.
+Alias Adaktif/Spritual dikenali tanpa mengubah nilai asli di database. Record
+lama tanpa kategori tersebut tetap masuk total Asrama dan tren bulanan;
+jumlah yang belum terklasifikasi ditampilkan sebagai catatan. Form kegiatan
+Asrama baru memakai pilihan kategori yang sama (default Adaptif); kategori
+lama dipertahankan saat edit sampai pengguna memilih kategori baru.
