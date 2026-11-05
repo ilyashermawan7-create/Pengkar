@@ -3,6 +3,7 @@ Requires Playwright and Chromium; uses only a temporary database.
 """
 import os
 import io
+import base64
 import csv as csv_tools
 import json
 import secrets
@@ -631,9 +632,9 @@ def main():
                 expect(listing).to_contain_text('Kegiatan Grup Asrama')
                 expect(listing).to_contain_text('Pengkar Asrama Rasio 2030')
                 page.get_by_label('Grup Pengguna',exact=True).select_option('ppk-telu')
-                expect(page.get_by_text('Total Kasus',exact=True).locator('..')).to_contain_text('0')
+                expect(page.get_by_text('Total Laporan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('0')
                 page.get_by_role('button',name='Laporan',exact=False).first.click()
-                cases_csv=b'Tahun,Tanggal Laporan Masuk,Nomor Kasus,Kategori,Status Kasus,Status Pelaporan (Pembuatan BAP),Konseling Pelapor\n2024,05/11/2024,CASE-TEST-1,Psikis,Tutup Kasus,TRUE,YA\n2025,,CASE-TEST-2,,,FALSE,\n'
+                cases_csv=b'Tahun,Tanggal Laporan Masuk,Nomor Kasus,Kategori,Status Kasus,Status Pelaporan (Pembuatan BAP),Konseling Pelapor,Fakultas Terlapor,Program Studi Terlapor\n2024,05/11/2024,CASE-TEST-1,Psikis,Tutup Kasus,TRUE,YA,FIF,Informatika\n2025,,CASE-TEST-2,,,FALSE,,FEB,Manajemen\n'
                 case_file={'name':'kasus-uji.csv','mimeType':'text/csv','buffer':cases_csv}
                 page.get_by_label('File kasus PPKPT',exact=True).set_input_files(case_file)
                 expect(page.get_by_role('button',name='Impor 2 Kasus',exact=True)).to_be_enabled()
@@ -648,13 +649,35 @@ def main():
                 page.get_by_role('button',name='Simpan Kasus',exact=True).click()
                 expect(page.get_by_text('Data kasus berhasil disimpan.',exact=True)).to_be_visible()
                 page.get_by_role('button',name='Dashboard',exact=False).first.click()
-                expect(page.get_by_text('Total Kasus',exact=True).locator('..')).to_contain_text('2')
-                expect(page.get_by_text('Kasus Ditutup',exact=True).locator('..')).to_contain_text('1')
-                expect(page.get_by_text('Dalam Proses',exact=True).locator('..')).to_contain_text('1')
+                expect(page.get_by_text('Total Laporan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('2')
+                expect(page.get_by_text('Selesai / Putusan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('1')
+                expect(page.get_by_text('Investigasi Aktif',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('1')
                 expect(page.get_by_text('1 kasus belum memiliki tanggal laporan masuk',exact=False)).to_be_visible()
                 page.get_by_label('Tahun kasus',exact=True).select_option('2024')
-                expect(page.get_by_text('Total Kasus',exact=True).locator('..')).to_contain_text('1')
+                expect(page.get_by_text('Total Laporan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('1')
                 page.get_by_role('button',name='Reset Filter Kasus',exact=True).click()
+                expect(page.get_by_text('Total Laporan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('2')
+                expect(page.get_by_role('heading',name='Executive Dashboard PPKPT',exact=True)).to_be_visible()
+                distribution=page.get_by_role('region',name='Sebaran prodi kasus PPKPT',exact=True)
+                expect(distribution.locator('tbody tr')).to_have_count(2)
+                expect(distribution).not_to_contain_text('CASE-TEST-1')
+                page.get_by_label('Fakultas terlapor',exact=True).select_option('FIF')
+                expect(page.get_by_text('Total Laporan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('1')
+                expect(distribution.locator('tbody tr')).to_have_count(1)
+                page.get_by_role('button',name='Reset Filter Kasus',exact=True).click()
+                page.get_by_label('Cari prodi atau fakultas terlapor',exact=True).fill('Manajemen')
+                expect(distribution.locator('tbody tr')).to_have_count(1)
+                expect(distribution).to_contain_text('FEB')
+                page.get_by_label('Cari prodi atau fakultas terlapor',exact=True).fill('')
+                expect(distribution.locator('tbody tr')).to_have_count(2)
+                page.screenshot(path=str(ARTIFACTS/'ppkt-executive-dashboard.png'),full_page=True)
+                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                logo_bytes=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a1XcAAAAASUVORK5CYII=')
+                page.get_by_label('Unggah logo Satgas PPKPT',exact=True).set_input_files({'name':'test-logo.png','mimeType':'image/png','buffer':logo_bytes})
+                expect(page.get_by_text('Logo Satgas PPKPT berhasil diperbarui.',exact=True)).to_be_visible()
+                expect(page.get_by_alt_text('Logo Satgas PPKPT',exact=True)).to_be_visible()
+                assert page.get_by_alt_text('Logo Satgas PPKPT',exact=True).evaluate('(image)=>image.complete&&image.naturalWidth>0')
+                print('PASS: executive PPKPT layout, faculty filter, protected prodi distribution, logo upload')
                 print('PASS: PPK Tel-U case dashboard, original column import, duplicate protection, case editing and year filters')
                 page.reload()
                 page.get_by_role('button',name='Laporan',exact=False).first.click()

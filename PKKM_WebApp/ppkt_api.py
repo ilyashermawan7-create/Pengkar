@@ -2,6 +2,10 @@
 import datetime
 import json
 import re
+import base64
+import hashlib
+from fastapi.responses import Response
+from ppkt_executive import faculty_label,executive_stats
 from fastapi import Depends,HTTPException
 from pydantic import BaseModel,Field,ConfigDict,model_validator
 
@@ -39,6 +43,7 @@ def number_key(number):return re.sub(r'\s+','',number).casefold()
 def initialize(connect):
     with connect() as c:
         c.execute('CREATE TABLE IF NOT EXISTS ppkt_cases(id INTEGER PRIMARY KEY,case_key TEXT UNIQUE NOT NULL,payload TEXT NOT NULL,created_by INTEGER,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)')
+        c.execute('CREATE TABLE IF NOT EXISTS ppkt_branding(id INTEGER PRIMARY KEY CHECK(id=1),mime TEXT NOT NULL,image BLOB NOT NULL)')
 
 def bucket(status):
     value=' '.join(status.casefold().split())
@@ -61,6 +66,7 @@ def summary(records):
         for field in keys:
             values=[getattr(item,field) for item in records]
             result[target][field]={'yes':sum(value is True for value in values),'no':sum(value is False for value in values),'unknown':sum(value is None for value in values)}
+    result.update(executive_stats(records,bucket))
     return result
 
 def register(app,connect,auth,audit):
@@ -68,27 +74,61 @@ def register(app,connect,auth,audit):
         if user['role'] not in ('admin','operator','viewer'):raise HTTPException(403,'Ringkasan kasus PPK Tel-U tidak tersedia untuk role ini')
     def admin_access(user):
         if user['role']!='admin':raise HTTPException(403,'Rincian dan impor kasus hanya tersedia untuk Super Admin')
-    def selected(c,year,category,status):
+    def selected(c,year,category,status,faculty=''):
         rows=[]
         for row in c.execute('SELECT id,payload FROM ppkt_cases ORDER BY id'):
             item=CaseRecord.model_validate_json(row['payload'])
             if year is not None and item.year!=year:continue
             if category and (item.category or 'Belum diisi')!=category:continue
             if status and bucket(item.status)!=status:continue
+            if faculty and faculty_label(item)!=faculty:continue
             rows.append((row['id'],item))
         return rows
     @app.get('/api/ppkt/summary')
-    def get_summary(year:int|None=None,category:str='',status:str='',user=Depends(auth)):
+    def get_summary(year:int|None=None,category:str='',status:str='',faculty:str='',user=Depends(auth)):
         read_access(user)
         with connect() as c:
             all_rows=selected(c,None,'','')
-            records=selected(c,year,category,status)
-        return {**summary([item for _,item in records]),'availableYears':sorted({item.year for _,item in all_rows if item.year},reverse=True),'availableCategories':sorted({item.category or 'Belum diisi' for _,item in all_rows})}
+            records=selected(c,year,category,status,faculty)
+        return {**summary([item for _,item in records]),'availableYears':sorted({item.year for _,item in all_rows if item.year},reverse=True),'availableCategories':sorted({item.category or 'Belum diisi' for _,item in all_rows}),'availableFaculties':sorted({faculty_label(item) for _,item in all_rows})}
     @app.get('/api/ppkt/cases')
-    def get_cases(year:int|None=None,category:str='',status:str='',user=Depends(auth)):
+    def get_cases(year:int|None=None,category:str='',status:str='',faculty:str='',user=Depends(auth)):
         admin_access(user)
-        with connect() as c:records=selected(c,year,category,status)
+        with connect() as c:records=selected(c,year,category,status,faculty)
         return {'items':[dict(item.model_dump(mode='json'),id=ident) for ident,item in records]}
+    @app.get('/api/ppkt/distribution')
+    def case_distribution(year:int|None=None,category:str='',status:str='',faculty:str='',search:str='',page:int=1,size:int=10,user=Depends(auth)):
+        admin_access(user)
+        if page<1 or size not in (10,50,10000) or len(search)>200:raise HTTPException(422,'Parameter halaman tidak valid')
+        with connect() as c:rows=selected(c,year,category,status,faculty)
+        query=search.strip().casefold()
+        items=[{'displayId':f"CASE-{item.year or 'NA'}-{ident:04d}",'year':item.year,'faculty':faculty_label(item),'studyProgram':item.reportedStudyProgram or 'Belum diisi','category':item.category or 'Belum diisi','status':item.status or 'Belum diisi','statusGroup':bucket(item.status),'counseling':item.reporterCounseling} for ident,item in rows if not query or query in faculty_label(item).casefold() or query in item.reportedStudyProgram.casefold()]
+        return {'total':len(items),'items':items[(page-1)*size:page*size]}
+
+    @app.get('/api/ppkt/logo')
+    def get_logo():
+        with connect() as c:
+            row=c.execute('SELECT mime,image FROM ppkt_branding WHERE id=1').fetchone()
+        if not row:raise HTTPException(404,'Logo belum diunggah')
+        digest=hashlib.sha256(row['image']).hexdigest()
+        return Response(content=row['image'],media_type=row['mime'],headers={'Cache-Control':'no-cache','ETag':digest,'X-Content-Type-Options':'nosniff'})
+
+    class LogoData(BaseModel):
+        data:str=Field(max_length=750000)
+    @app.put('/api/ppkt/logo')
+    def upload_logo(data:LogoData,user=Depends(auth)):
+        admin_access(user)
+        try:
+            prefix,encoded=data.data.split(',',1)
+            image=base64.b64decode(encoded,validate=True)
+        except (ValueError,TypeError):raise HTTPException(422,'Berkas logo tidak valid')
+        mime='image/png' if image.startswith(b'\x89PNG\r\n\x1a\n') else 'image/jpeg' if image.startswith(b'\xff\xd8\xff') else 'image/webp' if image[:4]==b'RIFF' and image[8:12]==b'WEBP' else None
+        if not mime or len(image)>500000:raise HTTPException(422,'Gunakan PNG, JPG, atau WebP maksimal 500 KB')
+        with connect() as c:
+            c.execute('INSERT INTO ppkt_branding VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET mime=excluded.mime,image=excluded.image',(mime,image))
+            audit(c,user,'update_ppkt_logo','ppkt',None)
+        return {'version':hashlib.sha256(image).hexdigest()}
+
     @app.post('/api/ppkt/cases',status_code=201)
     def create_case(data:CaseRecord,user=Depends(auth)):
         admin_access(user)

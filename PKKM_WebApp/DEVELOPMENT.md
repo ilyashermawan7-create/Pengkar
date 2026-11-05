@@ -343,3 +343,30 @@ dan 32.000 survei: snapshot lengkap sekitar 19,6 MB (JSON sebelum kompresi),
 versus snapshot ringkas + statistik sekitar 1,4 KB. Auth 0,046 detik, snapshot
 ringkas 0,051 detik, statistik 0,367 detik. Angka bergantung volume kegiatan,
 lingkungan, dan jaringan; bukan pengukuran server produksi.
+
+## Executive Dashboard PPKPT
+
+Layout mengikuti referensi eksekutif: header Satgas, filter tahun/fakultas
+terlapor/kategori/status, lima kartu, tren tahunan dengan seri kekerasan seksual,
+doughnut kategori, sebaran fakultas, tahapan progres, rekomendasi dinamis dan
+tabel sebaran prodi berhalaman. Angka referensi tidak ditanam sebagai data.
+
+Rekomendasi sanksi berasal dari status yang eksplisit menyebut rekomendasi/
+penentuan/penetapan sanksi. Investigasi aktif = kasus dalam proses selain tahap
+tersebut. Ditarik/dicabut dan status kosong tetap ditampilkan terpisah, tidak
+menambah angka investigasi. Progres menggunakan kolom boolean masing-masing;
+status tutup kasus tidak otomatis dianggap penerbitan SK atau sanksi direktorat.
+
+Filter fakultas memakai reportedFaculty dan reportedInstitution: alias nama
+fakultas diseragamkan untuk tampilan, FKS/FKB ditampilkan sebagai satu klaster,
+dan instansi terlapor non-Telkom yang terisi diberi kelompok Eksternal. Nilai
+asli tidak diubah. Rekomendasi menggunakan hitungan filter aktif dan tidak
+menyatakan jumlah laporan sebagai tingkat risiko atau kesimpulan kausal.
+
+/api/ppkt/distribution hanya untuk Super Admin: kode CASE tampilan, tahun,
+fakultas, prodi, kategori, status, dan indikator konseling. Nomor kasus sumber,
+instansi lengkap, dan narasi tidak ikut respons. Operator/Viewer hanya melihat
+agregat fakultas. Logo resmi dapat diunggah pada Laporan PPK Tel-U (PNG/JPG/
+WebP maksimal 500 KB) dan disimpan dalam ppkt_branding di disk SQLite Render;
+tidak dimasukkan ke repositori. Header menampilkan lambang pengganti sampai
+logo resmi diunggah, tanpa menganggap lambang tersebut sebagai logo asli.

@@ -21,7 +21,7 @@ class DashboardTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(server.app)
         with server.connect() as c:
-            for table in ('ppkt_cases','pending_participants','activity_unidentified_participants','pending_surveys','student_directory','survey_responses','activity_participants','activity_details','students',
+            for table in ('ppkt_branding','ppkt_cases','pending_participants','activity_unidentified_participants','pending_surveys','student_directory','survey_responses','activity_participants','activity_details','students',
                           'evaluations','activities','audit','sessions','users'):
                 c.execute(f'DELETE FROM {table}')
             c.execute('INSERT INTO users(username,password_hash,full_name,role) VALUES(?,?,?,?)',
@@ -153,6 +153,35 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(self.client.post('/api/dashboard/stats',headers=asrama,json={'activityIds':[first]}).status_code,403)
         self.assertEqual(self.client.get('/api/dashboard/search?query=Peserta',headers=self.headers).json()['activityIds'],[first,second])
         self.assertEqual(self.client.post('/api/dashboard/stats',json={'activityIds':[first]}).status_code,401)
+
+    def test_ppkt_executive_summary_faculty_filters_and_projection(self):
+        items=[{'caseNumber':'SOURCE-PRIVATE-1','year':2024,'category':'Kekerasan Seksual','status':'Kesimpulan dan Rekomendasi Sanksi','reportedFaculty':'Fakultas Ekonomi dan Bisnis','reportedInstitution':'Universitas Telkom','reportedStudyProgram':'Program Uji','notes':'Narasi tidak untuk dashboard'},
+               {'caseNumber':'SOURCE-PRIVATE-2','year':2025,'category':'Psikis','status':'Dengar Keterangan','reportedFaculty':'FEB'},
+               {'caseNumber':'SOURCE-PRIVATE-3','year':2025,'status':'Tutup Kasus','reportedFaculty':'FPTK','reportedInstitution':'Universitas Lain'}]
+        self.assertEqual(self.client.post('/api/ppkt/import',headers=self.headers,json={'items':items}).status_code,200)
+        data=self.client.get('/api/ppkt/summary',headers=self.headers).json()
+        self.assertEqual(data['recommendations'],1);self.assertEqual(data['activeInvestigation'],1)
+        self.assertEqual(data['reportedFaculties'],{'FEB':2,'Eksternal':1})
+        self.assertEqual(data['sexualYears'],{'2024':1})
+        self.assertEqual(self.client.get('/api/ppkt/summary?faculty=FEB',headers=self.headers).json()['total'],2)
+        distribution=self.client.get('/api/ppkt/distribution?faculty=FEB&search=Program',headers=self.headers).json()
+        self.assertEqual(distribution['total'],1)
+        self.assertNotIn('SOURCE-PRIVATE',str(distribution));self.assertNotIn('Narasi',str(distribution))
+        self.assertEqual(distribution['items'][0]['studyProgram'],'Program Uji')
+        _,viewer=self.new_user('distributionviewer','viewer')
+        self.assertEqual(self.client.get('/api/ppkt/distribution',headers=viewer).status_code,403)
+
+    def test_ppkt_logo_upload_is_admin_only_and_survives_api_reads(self):
+        import base64
+        image=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a1XcAAAAASUVORK5CYII=')
+        body={'data':'data:image/png;base64,'+base64.b64encode(image).decode()}
+        _,viewer=self.new_user('logoviewer','viewer')
+        self.assertEqual(self.client.put('/api/ppkt/logo',headers=viewer,json=body).status_code,403)
+        self.assertEqual(self.client.put('/api/ppkt/logo',headers=self.headers,json={'data':'data:image/svg+xml;base64,PHN2Zz4='}).status_code,422)
+        self.assertEqual(self.client.put('/api/ppkt/logo',headers=self.headers,json=body).status_code,200)
+        response=self.client.get('/api/ppkt/logo')
+        self.assertEqual(response.status_code,200);self.assertEqual(response.content,image)
+        self.assertEqual(response.headers['content-type'],'image/png')
 
     def test_ppkt_import_summary_duplicates_and_missing_fields(self):
         items=[{'caseNumber':'TEST-1','year':2024,'reportDate':'2024-11-05','category':'Psikis','status':'Tutup Kasus','bap':True,'reporterCounseling':False},
