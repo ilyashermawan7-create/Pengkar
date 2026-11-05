@@ -4,9 +4,10 @@ import json
 import re
 import base64
 import hashlib
+from pathlib import Path
 from fastapi.responses import Response
 from ppkt_executive import faculty_label,executive_stats
-from fastapi import Depends,HTTPException
+from fastapi import Depends,HTTPException,Header
 from pydantic import BaseModel,Field,ConfigDict,model_validator
 
 class CaseRecord(BaseModel):
@@ -40,10 +41,22 @@ class CaseImport(BaseModel):
     items:list[CaseRecord]=Field(min_length=1,max_length=10000)
 
 def number_key(number):return re.sub(r'\s+','',number).casefold()
+DEFAULT_LOGO=Path(__file__).parent/'static/images/logo-satgas-ppkpt.png'
+
 def initialize(connect):
     with connect() as c:
         c.execute('CREATE TABLE IF NOT EXISTS ppkt_cases(id INTEGER PRIMARY KEY,case_key TEXT UNIQUE NOT NULL,payload TEXT NOT NULL,created_by INTEGER,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)')
         c.execute('CREATE TABLE IF NOT EXISTS ppkt_branding(id INTEGER PRIMARY KEY CHECK(id=1),mime TEXT NOT NULL,image BLOB NOT NULL)')
+        c.execute('CREATE TABLE IF NOT EXISTS ppkt_branding_defaults(digest TEXT PRIMARY KEY,applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)')
+        if DEFAULT_LOGO.exists():
+            image=DEFAULT_LOGO.read_bytes()
+            digest=hashlib.sha256(image).hexdigest()
+            first=c.execute('INSERT OR IGNORE INTO ppkt_branding_defaults(digest) VALUES(?)',(digest,)).rowcount
+            if first:
+                # Install this supplied official logo once, replacing any old substitute.
+                # A later intentional upload remains intact on subsequent restarts.
+                c.execute("INSERT INTO ppkt_branding VALUES(1,'image/png',?) ON CONFLICT(id) DO UPDATE SET mime=excluded.mime,image=excluded.image",(image,))
+
 
 def bucket(status):
     value=' '.join(status.casefold().split())
@@ -106,12 +119,14 @@ def register(app,connect,auth,audit):
         return {'total':len(items),'items':items[(page-1)*size:page*size]}
 
     @app.get('/api/ppkt/logo')
-    def get_logo():
+    def get_logo(if_none_match:str|None=Header(None)):
         with connect() as c:
             row=c.execute('SELECT mime,image FROM ppkt_branding WHERE id=1').fetchone()
         if not row:raise HTTPException(404,'Logo belum diunggah')
-        digest=hashlib.sha256(row['image']).hexdigest()
-        return Response(content=row['image'],media_type=row['mime'],headers={'Cache-Control':'no-cache','ETag':digest,'X-Content-Type-Options':'nosniff'})
+        digest='"'+hashlib.sha256(row['image']).hexdigest()+'"'
+        headers={'Cache-Control':'no-cache','ETag':digest,'X-Content-Type-Options':'nosniff'}
+        if if_none_match==digest:return Response(status_code=304,headers=headers)
+        return Response(content=row['image'],media_type=row['mime'],headers=headers)
 
     class LogoData(BaseModel):
         data:str=Field(max_length=750000)

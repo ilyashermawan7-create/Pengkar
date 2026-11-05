@@ -171,6 +171,22 @@ class DashboardTests(unittest.TestCase):
         _,viewer=self.new_user('distributionviewer','viewer')
         self.assertEqual(self.client.get('/api/ppkt/distribution',headers=viewer).status_code,403)
 
+    def test_official_ppkt_logo_is_installed_once_without_resetting_later_uploads(self):
+        from ppkt_api import initialize as initialize_ppkt,DEFAULT_LOGO
+        with tempfile.TemporaryDirectory(prefix='ppkt-logo-') as directory:
+            database=Path(directory)/'branding.sqlite3'
+            def connect():
+                c=sqlite3.connect(database);c.row_factory=sqlite3.Row;return c
+            # Simulate a previously configured substitute logo.
+            with connect() as c:
+                c.execute('CREATE TABLE ppkt_branding(id INTEGER PRIMARY KEY,mime TEXT NOT NULL,image BLOB NOT NULL)')
+                c.execute("INSERT INTO ppkt_branding VALUES(1,'image/png',?)",(b'old-logo',))
+            initialize_ppkt(connect)
+            with connect() as c:self.assertEqual(c.execute('SELECT image FROM ppkt_branding WHERE id=1').fetchone()[0],DEFAULT_LOGO.read_bytes())
+            with connect() as c:c.execute('UPDATE ppkt_branding SET image=? WHERE id=1',(b'later-intentional-upload',))
+            initialize_ppkt(connect)
+            with connect() as c:self.assertEqual(c.execute('SELECT image FROM ppkt_branding WHERE id=1').fetchone()[0],b'later-intentional-upload')
+
     def test_ppkt_logo_upload_is_admin_only_and_survives_api_reads(self):
         import base64
         image=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a1XcAAAAASUVORK5CYII=')
@@ -182,6 +198,9 @@ class DashboardTests(unittest.TestCase):
         response=self.client.get('/api/ppkt/logo')
         self.assertEqual(response.status_code,200);self.assertEqual(response.content,image)
         self.assertEqual(response.headers['content-type'],'image/png')
+        cached=self.client.get('/api/ppkt/logo',headers={'If-None-Match':response.headers['etag']})
+        self.assertEqual(cached.status_code,304)
+        self.assertEqual(cached.content,b'')
 
     def test_ppkt_import_summary_duplicates_and_missing_fields(self):
         items=[{'caseNumber':'TEST-1','year':2024,'reportDate':'2024-11-05','category':'Psikis','status':'Tutup Kasus','bap':True,'reporterCounseling':False},

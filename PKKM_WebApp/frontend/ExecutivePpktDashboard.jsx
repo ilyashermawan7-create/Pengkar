@@ -5,7 +5,7 @@ const percent=(n,total)=>total?100*n/total:0;
 export function SatgasLogo({version='initial'}){
  const [failed,setFailed]=useState(false);useEffect(()=>setFailed(false),[version]);
  if(failed)return <div className="shrink-0 border border-slate-200 bg-slate-50 rounded-xl p-3 text-xs text-slate-500 max-w-40">Logo Satgas PPKPT belum diunggah</div>;
- return <div className="shrink-0"><img src={'/api/ppkt/logo?v='+version} onError={()=>setFailed(true)} alt="Logo Satgas PPKPT" className="h-20 w-auto max-w-56 object-contain"/></div>;
+ return <div className="shrink-0"><img src={'/api/ppkt/logo?v='+version} onError={()=>setFailed(true)} alt="Logo Satgas PPKPT" className="h-24 w-auto max-w-64 object-contain"/></div>;
 }
 function ExecutiveChart({title,subtitle,badge,labels,datasets,doughnut=false,kind='bar'}){
  const canvas=useRef(null),signature=JSON.stringify({labels,datasets});

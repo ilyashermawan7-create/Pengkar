@@ -376,3 +376,10 @@ pada header: Permendikbudristek 55 Tahun 2024 dan PU Rektor
 PU. 004/KMH01/KKA/2026. Ikon perisai pengganti dihapus; jika berkas logo resmi
 belum diunggah, header menampilkan keterangan tersebut dan tidak menyamakan
 ikon umum dengan logo Satgas. Logo asli dibaca dari unggahan server.
+
+Logo Satgas PPKPT resmi dari Logo PPKPT.rar disertakan tanpa perubahan pada
+static/images/logo-satgas-ppkpt.png. Saat startup, tiap versi hash logo bawaan
+diterapkan satu kali ke ppkt_branding, menggantikan logo lama bila ada. Tabel
+ppkt_branding_defaults memastikan unggahan manual berikutnya tidak ditimpa
+saat restart. Endpoint logo mendukung ETag/304 agar logo tidak diunduh ulang
+ketika isinya tetap sama. Pemasangan tidak mengubah kasus atau data pengguna.
