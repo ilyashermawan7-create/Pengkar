@@ -63,7 +63,7 @@ def auth(authorization:Optional[str]=Header(None)):
 
 def allow(u,program=None,admin=False):
     if admin and u['role']!='admin':raise HTTPException(403,'Hanya administrator')
-    if u['role'] in ('viewer','verifier'):raise HTTPException(403,'Akses baca saja')
+    if u['role'] in ('viewer','verifier','ppkpt'):raise HTTPException(403,'Akses baca saja')
     if program and u['role'] not in ('admin','operator', 'pengkar' if program=='Pengembangan Karakter' else 'asrama'):
         raise HTTPException(403,'Tidak berwenang pada program ini')
 

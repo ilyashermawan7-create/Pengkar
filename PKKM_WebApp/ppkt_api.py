@@ -84,9 +84,9 @@ def summary(records):
 
 def register(app,connect,auth,audit):
     def read_access(user):
-        if user['role'] not in ('admin','operator','viewer'):raise HTTPException(403,'Ringkasan kasus PPK Tel-U tidak tersedia untuk role ini')
+        if user['role'] not in ('admin','operator','viewer','ppkpt'):raise HTTPException(403,'Ringkasan kasus PPK Tel-U tidak tersedia untuk role ini')
     def admin_access(user):
-        if user['role']!='admin':raise HTTPException(403,'Rincian dan impor kasus hanya tersedia untuk Super Admin')
+        if user['role'] not in ('admin','ppkpt'):raise HTTPException(403,'Rincian dan impor kasus hanya tersedia untuk Super Admin dan Operator PPKPT')
     def selected(c,year,category,status,faculty=''):
         rows=[]
         for row in c.execute('SELECT id,payload FROM ppkt_cases ORDER BY id'):
@@ -132,7 +132,7 @@ def register(app,connect,auth,audit):
         data:str=Field(max_length=750000)
     @app.put('/api/ppkt/logo')
     def upload_logo(data:LogoData,user=Depends(auth)):
-        admin_access(user)
+        if user['role']!='admin':raise HTTPException(403,'Logo hanya dapat diubah Super Admin')
         try:
             prefix,encoded=data.data.split(',',1)
             image=base64.b64decode(encoded,validate=True)

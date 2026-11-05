@@ -383,3 +383,6 @@ diterapkan satu kali ke ppkt_branding, menggantikan logo lama bila ada. Tabel
 ppkt_branding_defaults memastikan unggahan manual berikutnya tidak ditimpa
 saat restart. Endpoint logo mendukung ETag/304 agar logo tidak diunduh ulang
 ketika isinya tetap sama. Pemasangan tidak mengubah kasus atau data pengguna.
+
+### Operator PPKPT dan identitas Telkom
+Akun dengan dashboard_role verifier dimigrasikan otomatis menjadi ppkpt (tanpa mengubah kredensial); API menerima verifier sebagai alias kompatibilitas. Operator PPKPT mengelola kasus PPK Tel-U, tetapi tidak mengubah kegiatan, survei, pengguna atau logo. Login membuka grup Dashboard keseluruhan. Banner dashboard dan login memakai dua foto asli dalam static/images/telu-*.jpg dari Background.rar, dengan lapisan warna merah Telkom.

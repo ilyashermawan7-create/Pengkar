@@ -36,3 +36,26 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 @font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url('/static/fonts/plus-jakarta-sans-latin-700-normal.woff2') format('woff2'); }
 
 @font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 800; font-display: swap; src: url('/static/fonts/plus-jakarta-sans-latin-800-normal.woff2') format('woff2'); }
+
+/* Telkom University visual identity; photos remain original uploaded assets. */
+:root { --telu-red:#d71920; --telu-wine:#8d1024; --telu-ink:#20232b; }
+.telu-app { background:linear-gradient(135deg,#f9f1f2 0%,#f5f6f8 42%,#f1f3f5 100%); }
+.telu-app aside { border-right-color:#eadde0; }
+.telu-app > div > header { border-top:3px solid var(--telu-red); }
+.telu-app button:focus-visible,.telu-app select:focus-visible,.telu-app input:focus-visible { outline:2px solid var(--telu-red); outline-offset:3px; }
+.telu-banner { position:relative; isolation:isolate; min-height:236px; border-radius:26px; overflow:hidden; background:#8d1024; color:#fff; box-shadow:0 12px 32px #8d10241a; }
+.telu-banner-photo { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:66% 55%; z-index:0; }
+.telu-banner-shade { position:absolute; inset:0; z-index:1; background:linear-gradient(100deg,#840d24f7 0%,#ae1126e8 39%,#6716286b 70%,#15222b2b 100%); }
+.telu-banner::after { z-index:3; content:""; position:absolute; height:6px; left:0; right:0; bottom:0; background:linear-gradient(90deg,#fff 0 15%,#eb2030 15% 56%,#8d1024 56% 100%); }
+.telu-banner-copy { position:relative; z-index:2; max-width:690px; padding:30px 34px 34px; }
+.telu-eyebrow { display:inline-flex; gap:10px; align-items:center; font-size:10px; font-weight:700; letter-spacing:.16em; padding:7px 11px; border:1px solid #ffffff50; border-radius:999px; background:#ffffff12; }
+.telu-banner h1 { font-size:clamp(25px,2.8vw,36px); line-height:1.18; font-weight:800; letter-spacing:-.035em; margin:16px 0 11px; }
+.telu-banner-copy > p { max-width:540px; color:#fff0f2; font-size:13px; line-height:1.7; }
+.telu-banner-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:19px; }
+.telu-banner-tags span { background:#ffffff16; border:1px solid #ffffff2e; border-radius:7px; padding:5px 9px; font-size:10px; }
+.telu-banner-mark { z-index:2; position:absolute; right:25px; bottom:23px; display:flex; flex-direction:column; align-items:flex-end; font-size:25px; font-weight:900; text-shadow:0 2px 10px #0005; }
+.telu-banner-mark span { font-size:9px; font-weight:500; letter-spacing:.1em; }
+.telu-login-photo { background:#5c0e20; isolation:isolate; }
+.telu-login-image { position:absolute; inset:0; height:100%; width:100%; object-fit:cover; object-position:55% 50%; z-index:0; }
+.telu-login-shade { position:absolute; inset:0; z-index:1; background:linear-gradient(155deg,#4c0b20d9 0%,#9a0f29b8 48%,#190d1be8 100%); }
+@media(max-width:640px) { .telu-banner-copy{padding:23px 21px 52px;} .telu-banner-mark{font-size:18px;right:18px;bottom:14px;} .telu-eyebrow{font-size:8px;letter-spacing:.08em;} }

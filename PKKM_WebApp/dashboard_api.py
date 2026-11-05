@@ -62,6 +62,7 @@ def initialize(connect):
         for name, default in [('email', ''), ('institution', ''), ('campus', 'Telkom University'), ('dashboard_role', '')]:
             if name not in columns:
                 c.execute(f"ALTER TABLE users ADD COLUMN {name} TEXT NOT NULL DEFAULT '{default}'")
+        c.execute("UPDATE users SET dashboard_role='ppkpt' WHERE dashboard_role='verifier'")
         c.executescript('''
             CREATE TABLE IF NOT EXISTS activity_details (
                 activity_id INTEGER PRIMARY KEY REFERENCES activities(id) ON DELETE CASCADE,
@@ -193,7 +194,7 @@ class DashboardUser(Input):
     username: str = Field(min_length=3, max_length=60)
     email: str = Field(default='', max_length=254)
     nama: str = Field(min_length=2, max_length=120)
-    role: Literal['admin', 'operator', 'verifier', 'pengkar', 'asrama', 'viewer']
+    role: Literal['admin', 'operator', 'ppkpt', 'verifier', 'pengkar', 'asrama', 'viewer']
     password: str = Field(min_length=12, max_length=512)
 
 
@@ -550,7 +551,7 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
         table='pending_surveys' if surveys else 'pending_participants'
         model=SurveyMigrationRow if surveys else ParticipantMigrationRow
         if surveys:
-            if user['role']=='viewer':raise HTTPException(403,'Akses baca saja')
+            if user['role'] in ('viewer','ppkpt','verifier'):raise HTTPException(403,'Akses baca saja')
         else:allow(user)
         with connect() as c:
             if not data.dry_run:c.execute('BEGIN IMMEDIATE')
@@ -666,7 +667,7 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
         return hashlib.sha256(json.dumps(identity,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
 
     def apply_survey_migration(c,items,user):
-        if user['role']=='viewer':raise HTTPException(403,'Akses baca saja')
+        if user['role'] in ('viewer','ppkpt','verifier'):raise HTTPException(403,'Akses baca saja')
         created=skipped=pending_count=0
         grouped={}
         for item in items:
@@ -712,7 +713,7 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
 
     @app.post('/api/migrate/surveys/pending/{record_key}/resolve', dependencies=[Depends(migration_access)])
     def resolve_pending(record_key: str, data: ResolveSurvey, user=Depends(auth)):
-        if user['role']=='viewer':raise HTTPException(403,'Akses baca saja')
+        if user['role'] in ('viewer','ppkpt','verifier'):raise HTTPException(403,'Akses baca saja')
         with connect() as c:
             c.execute('BEGIN IMMEDIATE')
             pending=c.execute('SELECT * FROM pending_surveys WHERE record_key=? AND user_id=?',(record_key,user['id'])).fetchone()
@@ -735,7 +736,7 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
     def replace_surveys(ident: int, data: list[Survey], user=Depends(auth)):
         if len(data) > 10000:
             raise HTTPException(422, 'Maksimal 10.000 respons per kegiatan')
-        if user['role'] == 'viewer':
+        if user['role'] in ('viewer','ppkpt','verifier'):
             raise HTTPException(403, 'Akses baca saja')
         with connect() as c:
             c.execute('BEGIN IMMEDIATE')
@@ -792,11 +793,12 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
     @app.post('/api/dashboard/users', status_code=201)
     def create_user(data: DashboardUser, user=Depends(auth)):
         manage_accounts(user,data.role)
-        role = {'operator':'pengkar', 'verifier':'viewer'}.get(data.role,data.role)
+        effective_role='ppkpt' if data.role=='verifier' else data.role
+        role = {'operator':'pengkar','ppkpt':'viewer'}.get(effective_role,effective_role)
         try:
             with connect() as c:
                 cur = c.execute('''INSERT INTO users(username,password_hash,full_name,role,email,dashboard_role)
-                    VALUES(?,?,?,?,?,?)''', (data.username,hash_password(data.password),data.nama,role,data.email,data.role if data.role in ('operator','verifier') else ''))
+                    VALUES(?,?,?,?,?,?)''', (data.username,hash_password(data.password),data.nama,role,data.email,effective_role if effective_role in ('operator','ppkpt') else ''))
                 audit(c,user,'create','user',cur.lastrowid)
                 return {'id':cur.lastrowid}
         except sqlite3.IntegrityError:

@@ -220,13 +220,28 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(self.snapshot()['activities'],[])
 
     def test_ppkt_permissions_separate_summary_from_sensitive_case_data(self):
-        for role in ('operator','viewer','pengkar','asrama','verifier'):
+        for role in ('operator','viewer','pengkar','asrama'):
             _,headers=self.new_user('ppkt'+role,role)
             self.assertEqual(self.client.get('/api/ppkt/summary',headers=headers).status_code,200 if role in ('operator','viewer') else 403)
             self.assertEqual(self.client.get('/api/ppkt/cases',headers=headers).status_code,403)
             self.assertEqual(self.client.post('/api/ppkt/import',headers=headers,json={'items':[{'caseNumber':'TEST'}]}).status_code,403)
             self.assertEqual(self.client.post('/api/ppkt/cases',headers=headers,json={'caseNumber':'TEST'}).status_code,403)
         self.assertEqual(self.client.get('/api/ppkt/summary').status_code,401)
+
+    def test_case_operator_manages_cases_and_legacy_accounts_migrate(self):
+        ident,headers=self.new_user('caseoperator','ppkpt')
+        for path in ('summary','cases','distribution'):
+            self.assertEqual(self.client.get('/api/ppkt/'+path,headers=headers).status_code,200)
+        response=self.client.post('/api/ppkt/cases',headers=headers,json={'caseNumber':'OPERATOR-TEST'})
+        self.assertEqual(response.status_code,201,response.text)
+        self.assertEqual(self.client.put('/api/ppkt/cases/'+str(response.json()['id']),headers=headers,json={'caseNumber':'OPERATOR-TEST','status':'Tutup Kasus'}).status_code,200)
+        self.assertEqual(self.client.post('/api/ppkt/import',headers=headers,json={'items':[{'caseNumber':'OPERATOR-IMPORT'}]}).status_code,200)
+        with server.connect() as c:
+            c.execute("UPDATE users SET dashboard_role='verifier' WHERE id=?",(ident,))
+        initialize(server.connect)
+        self.assertEqual(self.client.get('/api/ppkt/cases',headers=self.login('caseoperator')).status_code,200)
+        with server.connect() as c:
+            self.assertEqual(c.execute('SELECT dashboard_role FROM users WHERE id=?',(ident,)).fetchone()[0],'ppkpt')
 
     def test_ppkt_case_edit_and_validation_preserve_exact_source_status(self):
         result=self.client.post('/api/ppkt/cases',headers=self.headers,json={'caseNumber':'CASE-1','year':2024,'status':'Dengar Keterangan','notes':'Catatan asli'})
@@ -374,12 +389,12 @@ class DashboardTests(unittest.TestCase):
             response=self.client.post('/api/migrate/'+endpoint,headers=operator,json={'items':[]})
             self.assertEqual(response.status_code,403,response.text)
 
-    def test_verifier_can_only_change_surveys_and_viewer_is_read_only(self):
+    def test_legacy_verifier_becomes_case_operator_and_surveys_are_read_only(self):
         ident = self.create()
         _, verifier = self.new_user('verifier','verifier')
         _, viewer = self.new_user('viewer','viewer')
         self.assertEqual(self.client.post('/api/dashboard/activities',headers=verifier,json=self.activity()).status_code,403)
-        self.assertEqual(self.client.put(f'/api/dashboard/activities/{ident}/surveys',headers=verifier,json=[]).status_code,200)
+        self.assertEqual(self.client.put(f'/api/dashboard/activities/{ident}/surveys',headers=verifier,json=[]).status_code,403)
         self.assertEqual(self.client.put(f'/api/dashboard/activities/{ident}/surveys',headers=viewer,json=[]).status_code,403)
         self.assertEqual(self.snapshot(verifier)['adminList'],[])
 
@@ -501,14 +516,14 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(result.status_code,422)
         self.assertEqual(self.snapshot()['surveys'],[])
 
-    def test_verifier_can_migrate_surveys_but_not_activities(self):
+    def test_case_operator_cannot_migrate_surveys_or_activities(self):
         ident=self.create(self.activity(surveys=[]))
         _,headers=self.new_user('surveyverifier','verifier')
         result=self.client.post('/api/migrate/activities',headers=headers,json={'items':[self.activity(participants=[],surveys=[])]})
         self.assertEqual(result.status_code,403)
         result=self.client.post('/api/migrate/surveys',headers=headers,json={'items':[{
             'activityId':ident,'response':{'tanggalSurvey':'2026-11-04','answers':[5]*20}}]})
-        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(result.status_code,403,result.text)
 
     def test_distinct_submission_timestamps_are_not_collapsed(self):
         ident=self.create(self.activity(surveys=[]))
@@ -788,9 +803,9 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(self.snapshot()['surveys'][0]['activityId'],second)
         self.assertEqual(len(self.snapshot()['pendingSurveys']),2)
 
-    def test_survey_group_connect_supports_verifier_and_batch_progress(self):
+    def test_survey_group_connect_supports_admin_and_batch_progress(self):
         target=self.create(self.activity(surveys=[]))
-        _,headers=self.new_user('auto-survey-verifier','verifier')
+        headers=self.headers
         items=[{'namaKegiatan':'Judul Survey Lama','importKey':str(i),'response':{
             'nim':str(900000000000+i),'answers':[3]*20}} for i in range(3)]
         self.client.post('/api/migrate/surveys',headers=headers,json={'items':items})

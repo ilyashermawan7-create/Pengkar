@@ -15,7 +15,7 @@ export default function MigrationPanel({activities,role,api,reload,pendingSurvey
   const [busy,setBusy]=useState(false);
   const canActivities=['admin','operator','pengkar','asrama'].includes(role);
   const canMaster=['admin','operator'].includes(role);
-  if(role==='viewer')return null;
+  if(['viewer','ppkpt'].includes(role))return null;
   const run=async(operation)=>{
     if(busy)return;
     setBusy(true);setMessage('');setError('');

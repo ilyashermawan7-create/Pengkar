@@ -25,6 +25,13 @@ ARTIFACTS = Path('/tmp/pkkm-browser-artifacts')
 ARTIFACTS.mkdir(exist_ok=True)
 
 
+def open_report(page):
+    group=page.get_by_label("Grup Pengguna",exact=True)
+    if group.input_value()=="overview":
+        group.select_option("pengkar")
+        if page.locator("aside").is_hidden():page.get_by_role("button",name="Buka menu",exact=True).click()
+    page.get_by_role('button',name='Laporan',exact=False).first.click()
+
 def main():
     with tempfile.TemporaryDirectory(prefix='pkkm-browser-') as tmp:
         password = secrets.token_urlsafe(24)
@@ -69,10 +76,13 @@ def main():
                 page.get_by_label('Password',exact=True).fill(password)
                 page.get_by_role('button',name='Login',exact=True).click()
                 expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
-                print('PASS: real login rejects wrong password and accepts stored account')
+                expect(page.get_by_label('Grup Pengguna',exact=True)).to_have_value('overview')
+                page.locator('.telu-banner-photo').evaluate('(img) => img.decode()')
+                page.screenshot(path=str(ARTIFACTS/'dashboard-telu.png'),full_page=True)
+                print('PASS: login defaults to overall Dashboard and accepts stored account')
                 assert url+'/api/dashboard?compact=true' in dashboard_requests
                 assert url+'/api/dashboard' not in dashboard_requests
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 page.get_by_label('Nama Kegiatan',exact=True).fill('Kegiatan Uji Browser')
                 assert dashboard_requests.count(url+'/api/dashboard')==1
                 print('PASS: login fetches only compact snapshot; full details are fetched once when opening Laporan')
@@ -161,7 +171,7 @@ def main():
                 page.reload()
                 expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
                 expect(page.get_by_text('Total Kegiatan',exact=True).locator('..')).to_contain_text('2')
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 recap=page.get_by_role('region',name='Rekap mahasiswa tersimpan',exact=True)
                 expect(recap.locator('tbody tr')).to_have_count(10)
                 recap.get_by_role('button',name='Berikutnya',exact=True).click()
@@ -185,7 +195,7 @@ def main():
                 recap.get_by_label('Cari mahasiswa dalam rekap',exact=True).fill('')
                 recap.get_by_label('Jumlah mahasiswa per halaman',exact=True).select_option('10')
                 print('PASS: student pagination 10/50/all, next/previous, final page and search')
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 with page.expect_download() as large_download:
                     page.get_by_role('button',name='Unduh PDF',exact=True).click()
                 large_pdf=Path(large_download.value.path()).read_bytes()
@@ -209,7 +219,7 @@ def main():
                 expect(page.get_by_role('region',name='Rekap mahasiswa tersimpan',exact=True)).to_have_count(0)
                 page.screenshot(path=str(ARTIFACTS/'dashboard.png'),full_page=True)
                 print('PASS: reload retains data and real charts; search and quarter filters update metrics')
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 page.get_by_role('button',name='Edit',exact=True).first.click()
                 expect(page.get_by_label('Nama Kegiatan',exact=True)).to_have_value('Kegiatan Uji Browser')
                 expect(page.get_by_label('Honor Pembicara (Rp)',exact=True)).to_have_value('Rp 250.000')
@@ -264,7 +274,7 @@ def main():
                 assert page.locator('aside').is_hidden()
                 page.get_by_role('button',name='Buka menu',exact=True).click()
                 expect(page.locator('aside')).to_be_visible()
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 expect(page.locator('aside')).to_be_hidden()
                 page.screenshot(path=str(ARTIFACTS/'mobile.png'),full_page=True)
                 page.set_viewport_size({'width':1440,'height':1000})
@@ -409,7 +419,7 @@ def main():
                 snapshot=page.request.get(url+'/api/dashboard',headers=auth).json()
                 assert any(s['nama']=='Tanpa NIM UI' and s['nim']=='' for s in snapshot['masterStudents'])
                 print('PASS: partial/undated survey stored pending then linked without fabricated scores; PDF and reload succeed')
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 migration=page.get_by_role('region',name='Migrasi data kegiatan dan survei',exact=True)
                 with page.expect_download() as participant_migration_template:
                     migration.get_by_role('button',name='Template Migrasi Peserta Kegiatan',exact=True).click()
@@ -454,7 +464,7 @@ def main():
                 assert result.status==200,result.text()
                 page.reload()
                 expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 listing=page.get_by_role('region',name='Daftar kegiatan tersimpan',exact=True)
                 total_count=before_count+55
                 expect(listing.locator('tbody tr')).to_have_count(10)
@@ -510,7 +520,7 @@ def main():
                 assert response.json()['pending']==1109
                 page.reload()
                 expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 migration=page.get_by_role('region',name='Migrasi data kegiatan dan survei',exact=True)
                 matcher=page.get_by_role('region',name='Peserta perlu dicocokkan',exact=True)
                 expect(matcher.get_by_role('button',name='Hubungkan Otomatis (1105)',exact=True)).to_be_enabled()
@@ -557,6 +567,7 @@ def main():
                     assert response.status==201,response.text()
                 page.reload()
                 expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
+                page.get_by_label('Grup Pengguna',exact=True).select_option('pengkar')
                 page.get_by_label('Tahun',exact=True).select_option('2030')
                 expect(page.get_by_text('Total Kegiatan',exact=True).locator('..').locator('span').nth(1)).to_have_text('2')
                 expect(page.get_by_text('Total Peserta',exact=True).locator('..').locator('span').nth(1)).to_have_text('400')
@@ -565,7 +576,7 @@ def main():
                 for label in ['Kegiatan Karakter','PPKPT']:
                     expect(page.get_by_text(label,exact=True).locator('..').locator('span').nth(1)).to_have_text('1')
                 expect(page.get_by_label('Rincian perhitungan kegiatan',exact=True)).to_contain_text('1 Karakter + 1 PPKPT = 2 kegiatan')
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 listing=page.get_by_role('region',name='Daftar kegiatan tersimpan',exact=True)
                 expect(listing.locator('tbody tr')).to_have_count(2)
                 with page.expect_download() as metrics_export:
@@ -584,7 +595,7 @@ def main():
                 result=page.request.post(url+'/api/migrate/surveys',headers=auth,data={'items':rows})
                 assert result.status==200,result.text()
                 page.reload()
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 migration=page.get_by_role('region',name='Migrasi data kegiatan dan survei',exact=True)
                 matcher=page.get_by_role('region',name='Survei perlu dicocokkan',exact=True)
                 expect(matcher.get_by_role('button',name='Hubungkan Otomatis (1574)',exact=True)).to_be_enabled()
@@ -625,7 +636,7 @@ def main():
                 page.get_by_label('Kategori',exact=True).select_option('Adaptif')
                 expect(page.get_by_text('Total Kegiatan',exact=True).locator('..').locator('span').nth(1)).to_have_text('1')
                 page.get_by_label('Kategori',exact=True).select_option('Semua Kategori')
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 expect(page.get_by_text('Input Kegiatan Asrama',exact=True)).to_be_visible()
                 listing=page.get_by_role('region',name='Daftar kegiatan tersimpan',exact=True)
                 expect(listing.locator('tbody tr')).to_have_count(2)
@@ -633,7 +644,7 @@ def main():
                 expect(listing).to_contain_text('Pengkar Asrama Rasio 2030')
                 page.get_by_label('Grup Pengguna',exact=True).select_option('ppk-telu')
                 expect(page.get_by_text('Total Laporan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('0')
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 cases_csv=b'Tahun,Tanggal Laporan Masuk,Nomor Kasus,Kategori,Status Kasus,Status Pelaporan (Pembuatan BAP),Konseling Pelapor,Fakultas Terlapor,Program Studi Terlapor\n2024,05/11/2024,CASE-TEST-1,Psikis,Tutup Kasus,TRUE,YA,FIF,Informatika\n2025,,CASE-TEST-2,,,FALSE,,FEB,Manajemen\n'
                 case_file={'name':'kasus-uji.csv','mimeType':'text/csv','buffer':cases_csv}
                 page.get_by_label('File kasus PPKPT',exact=True).set_input_files(case_file)
@@ -671,7 +682,7 @@ def main():
                 page.get_by_label('Cari prodi atau fakultas terlapor',exact=True).fill('')
                 expect(distribution.locator('tbody tr')).to_have_count(2)
                 page.screenshot(path=str(ARTIFACTS/'ppkt-executive-dashboard.png'),full_page=True)
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 logo_bytes=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a1XcAAAAASUVORK5CYII=')
                 page.get_by_label('Unggah logo Satgas PPKPT',exact=True).set_input_files({'name':'test-logo.png','mimeType':'image/png','buffer':logo_bytes})
                 expect(page.get_by_text('Logo Satgas PPKPT berhasil diperbarui.',exact=True)).to_be_visible()
@@ -680,7 +691,7 @@ def main():
                 print('PASS: executive PPKPT layout, faculty filter, protected prodi distribution, logo upload')
                 print('PASS: PPK Tel-U case dashboard, original column import, duplicate protection, case editing and year filters')
                 page.reload()
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 listing=page.get_by_role('region',name='Daftar kegiatan tersimpan',exact=True)
                 expect(listing).not_to_contain_text('CASE-TEST-1')
                 expect(listing).not_to_contain_text('Kegiatan Grup Asrama')
@@ -690,7 +701,7 @@ def main():
                 page.get_by_label('Password',exact=True).fill(operator_password)
                 page.get_by_role('button',name='Login',exact=True).click()
                 expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 expect(page.get_by_role('region',name='Migrasi data kegiatan dan survei',exact=True)).to_have_count(0)
                 expect(page.get_by_role('region',name='Survei kepuasan 20 pertanyaan',exact=True)).to_have_count(0)
                 expect(page.get_by_text('Input Kegiatan Pengembangan Karakter (16 Field Master)',exact=True)).to_be_visible()
@@ -738,7 +749,7 @@ def main():
                     category_ids[result.json()['id']]=(name,category)
                 page.reload()
                 page.get_by_label('Grup Pengguna',exact=True).select_option('asrama')
-                page.get_by_role('button',name='Laporan',exact=False).first.click()
+                open_report(page)
                 review=page.get_by_role('region',name='Kategorisasi data lama Asrama',exact=True)
                 review.get_by_role('button',name='Periksa Kategori Data Lama',exact=True).click()
                 expect(review).to_contain_text('kategori siap diterapkan')

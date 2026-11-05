@@ -8,6 +8,7 @@ import StudentRecap from './StudentRecap.jsx';
 import MonthlyActivityTrend from './MonthlyActivityTrend.jsx';
 import AsramaCategoryReview from './AsramaCategoryReview.jsx';
 import PpktDashboard from './PpktDashboard.jsx';
+import TeluBanner from './TeluBanner.jsx';
 import {asramaCategories,asramaCategory} from './asramaCategories.mjs';
 import {downloadReportPdf} from './reportPdf.mjs';
 import MigrationPanel from './MigrationPanel.jsx';
@@ -34,7 +35,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
 
       // 4 Menu Utama: 'dashboard' | 'laporan' | 'pengaturanAdmin' | 'pengaturan'
       const [activeNav, setActiveNav] = useState('dashboard');
-      const [activeGroup,setActiveGroup]=useState('pengkar');
+      const [activeGroup,setActiveGroup]=useState('overview');
       const groupLabel=navigationGroups.find(group=>group.id===activeGroup).label;
 
       const [students, setStudents] = useState([]);
@@ -116,7 +117,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const canManageAccounts=isAdmin||isOperator;
       const canWrite = ['admin','operator','pengkar','asrama'].includes(profileData.role);
       const canEdit = (act) => canWrite && (!['pengkar','asrama'].includes(profileData.role) || act.program === (profileData.role==='asrama'?'Asrama':'Pengembangan Karakter'));
-      const roleLabel = role => ({admin:'Super Admin KKA',operator:'Operator KKA',verifier:'Verifikator Survey',pengkar:'Operator Pengkar',asrama:'Operator Asrama',viewer:'Viewer'}[role] || role);
+      const roleLabel = role => ({admin:'Super Admin KKA',operator:'Operator KKA',ppkpt:'Operator PPKPT',verifier:'Operator PPKPT',pengkar:'Operator Pengkar',asrama:'Operator Asrama',viewer:'Viewer'}[role] || role);
       useEffect(()=>{if(isOperator)setNewAdmin(previous=>({...previous,role:'pengkar'}));},[isOperator]);
       useEffect(() => {
         if (!token) return;
@@ -192,7 +193,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
           const result=await api('/login',{method:'POST',body:JSON.stringify({username:loginUser,password:loginPass})},'');
           setLoginStage('Memuat dashboard…');
           await load(result.token,false);sessionStorage.setItem('pkkm_token',result.token);setToken(result.token);
-          setIsLoggedIn(true);setActiveNav('dashboard');setActiveGroup('pengkar');setLoginPass('');
+          setIsLoggedIn(true);setActiveNav('dashboard');setActiveGroup('overview');setLoginPass('');
         } catch(error) {setLoginError(error.message);} finally {setBusy(false);setLoginStage('');}
       };
       const handleLogout = async () => {
@@ -225,10 +226,10 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         await run(async()=>{
           const imported=await readSurveyResponses(file);
           const activityNames=[...new Set(imported.items.map(item=>item.namaKegiatan).filter(Boolean).map(normalizeName))];
-          const expectedId=profileData.role==='verifier'?Number(surveyActivityId):editingId;
+          const expectedId=editingId;
           if(imported.items.some(item=>item.activityId&&item.activityId!==expectedId))throw Error('ID kegiatan di file tidak cocok dengan form ini. Gunakan panel migrasi untuk mencocokkan kegiatan.');
           if(activityNames.length>1)throw Error('File memuat beberapa kegiatan. Gunakan panel Impor / Migrasi Data Lama.');
-          const expectedName=profileData.role==='verifier'?activities.find(a=>a.id===Number(surveyActivityId))?.namaKegiatan:activityForm.namaKegiatan;
+          const expectedName=activityForm.namaKegiatan;
           if(expectedName&&activityNames.length&&activityNames[0]!==normalizeName(expectedName))throw Error('Nama kegiatan di file tidak sesuai kegiatan yang sedang dipilih. Gunakan panel migrasi untuk beberapa kegiatan.');
           const parsed=imported.items.map(item=>{
             const matched=participantRows.find(s=>s.nim===item.response.nim)||findStudent(item.response.nim);
@@ -321,8 +322,10 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
           <div className="min-h-screen w-full flex flex-col md:flex-row bg-[#111315]">
 
             {/* SISI KIRI: BRANDING GELAP & BOKEH DENGAN LOGO TEL-U */}
-            <div className="w-full md:w-3/5 min-h-[40vh] md:min-h-screen relative overflow-hidden bg-gradient-to-br from-[#121316] via-[#1a1b20] to-[#0d0e11] p-8 md:p-16 flex flex-col justify-between">
+            <div className="w-full md:w-3/5 min-h-[40vh] md:min-h-screen relative overflow-hidden telu-login-photo p-8 md:p-16 flex flex-col justify-between">
 
+              <img src="/static/images/telu-bangkit.jpg" alt="" decoding="async" fetchPriority="low" className="telu-login-image"/>
+              <div className="telu-login-shade" aria-hidden="true"/>
               <div className="absolute top-1/4 right-1/4 w-80 h-80 bg-red-600/20 rounded-full blur-[100px] pointer-events-none"></div>
               <div className="absolute bottom-1/4 left-1/4 w-96 h-96 bg-slate-500/15 rounded-full blur-[120px] pointer-events-none"></div>
 
@@ -459,7 +462,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       // 2. TAMPILAN SETELAH LOGIN (PANEL DENGAN 4 MENU UTAMA)
       // =========================================================================
       return (
-        <div className="min-h-screen flex bg-[#f8f9fa] text-slate-800">
+        <div className="telu-app min-h-screen flex bg-[#f8f9fa] text-slate-800">
 
 
           {/* SIDEBAR KIRI */}
@@ -536,7 +539,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {activeNav === 'dashboard' && activeGroup!=='ppk-telu' && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
                 {statsLoading&&!fullDataLoaded&&<p role="status" className="text-sm text-slate-500">Memuat ringkasan peserta dan survei…</p>}
-                {activeGroup==='overview'&&<div className="bg-white border border-slate-200 rounded-2xl p-5"><h1 className="font-bold text-lg">Dashboard Keseluruhan</h1><p className="text-xs text-slate-500 mt-1">Gabungan kegiatan Pengembangan Karakter, PPKPT, dan Asrama beserta peserta dan surveinya, sesuai hak akses akun.</p></div>}
+                <TeluBanner group={activeGroup} title={activeGroup==='overview'?'Dashboard Keseluruhan':'Dashboard '+groupLabel} subtitle={activeGroup==='overview'?'Pantau kegiatan Pengembangan Karakter, PPKPT, dan Asrama dalam satu ringkasan.':'Ringkasan kegiatan, partisipasi mahasiswa, dan evaluasi '+groupLabel+'.'} />
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
@@ -771,7 +774,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                   </div>
 
                   {activeGroup==='asrama'&&['admin','asrama'].includes(profileData.role)&&<AsramaCategoryReview api={api} reload={load} />}
-                  {profileData.role==='verifier' && <section className="p-5 bg-amber-50 border border-amber-200 rounded-2xl space-y-3 text-xs"><h3 className="font-bold">Verifikasi / Impor Respons Survei</h3><label className="block">Kegiatan<select aria-label="Kegiatan survei" value={surveyActivityId} onChange={e=>{setSurveyActivityId(e.target.value);setSurveyRows([]);}} className="block w-full border rounded-xl p-3 mt-1"><option value="">Pilih kegiatan</option>{scopedActivities.map(a=><option key={a.id} value={a.id}>{a.namaKegiatan}</option>)}</select></label><input aria-label="Berkas survei verifikator" type="file" accept=".xlsx,.xls,.csv" onChange={handleImportSurveys} disabled={busy||!surveyActivityId}/><p>{surveyRows.length} respons siap disimpan.</p><button type="button" aria-label="Template Survey" title="20 pertanyaan asli. Lengkapi skor 1–5 sebelum mengimpor." onClick={downloadSurveyTemplate} className="border bg-white rounded-xl p-2 mr-2">Template Survey</button><button type="button" disabled={busy||!surveyRows.length} onClick={saveSurveyImport} className="bg-amber-600 text-white rounded-xl p-2">Simpan Respons Survei</button></section>}
+
                   {!canWrite && <p className="text-sm text-slate-500">Akun ini dapat membaca laporan. Input kegiatan tersedia untuk operator dan administrator.</p>}
                   {canWrite && <form onSubmit={handleSaveActivity} className="space-y-6 text-xs">
                     {editingId && <div className="p-3 bg-blue-50 text-blue-900 rounded-xl">Mengedit kegiatan #{editingId}. <button type="button" onClick={resetActivity}>Batalkan edit</button></div>}
@@ -1190,7 +1193,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                         onChange={(e) => setNewAdmin({ ...newAdmin, role: e.target.value })}
                         className="w-full border rounded-xl p-3 outline-none focus:border-[#D71920] bg-white font-semibold"
                       >
-                        {isAdmin&&<><option value="admin">Super Admin KKA</option><option value="operator">Operator KKA</option><option value="verifier">Verifikator Survey</option></>}<option value="pengkar">Operator Pengkar</option><option value="asrama">Operator Asrama</option><option value="viewer">Viewer</option>
+                        {isAdmin&&<><option value="admin">Super Admin KKA</option><option value="operator">Operator KKA</option><option value="ppkpt">Operator PPKPT</option></>}<option value="pengkar">Operator Pengkar</option><option value="asrama">Operator Asrama</option><option value="viewer">Viewer</option>
                       </select>
                     </div>
                     <div className="md:col-span-2"><label className="font-bold block mb-1" htmlFor="field-31">Password awal (minimal 12 karakter) *</label><input id="field-31" required minLength={12} type="password" autoComplete="new-password" value={newAdmin.password} onChange={e=>setNewAdmin({...newAdmin,password:e.target.value})} className="w-full border rounded-xl p-3" /></div>
