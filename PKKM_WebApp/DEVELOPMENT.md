@@ -391,3 +391,6 @@ Akun dengan dashboard_role verifier dimigrasikan otomatis menjadi ppkpt (tanpa m
 Tombol Ekspor PDF Dashboard tersedia pada Overview, Pengkar, Asrama, dan PPK Tel-U. dashboardPdf.mjs merender tampilan main dashboard dengan html2canvas, termasuk warna, kartu, foto, filter aktif, dan grafik, lalu membaginya ke PDF A4 dengan rasio gambar tetap. Tabel mengikuti halaman yang tampil; formulir laporan dan sidebar tidak diekspor. PDF dibuat di browser dengan html2canvas dan jsPDF, tanpa window.print atau permintaan rincian data tambahan.
 
 Log Out tersedia melalui dropdown Menu pengguna di header kanan atas; Escape menutup menu dan mengembalikan fokus.
+
+### Pembatasan Operator Asrama dan Operator PPKPT
+allowedNavigationGroups membatasi pilihan Asrama ke overview/asrama dan PPKPT ke overview/ppk-telu. Overview Asrama hanya memakai data program Asrama; overview PPKPT menampilkan dashboard kasus. Laporan operator tersebut hanya menampilkan input dan rekap, tanpa panel migrasi, administrasi akun, survei terpisah, branding atau kategorisasi massal. API snapshot/search/stats dan endpoint aktivitas lama tidak memberikan data kegiatan Pengkar kepada kedua role; PPKPT tidak menerima aktivitas/peserta/survei umum. Pengelolaan kasus PPK Tel-U memakai API kasus terpisah.

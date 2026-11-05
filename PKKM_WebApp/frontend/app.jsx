@@ -15,7 +15,7 @@ import {downloadReportPdf} from './reportPdf.mjs';
 import MigrationPanel from './MigrationPanel.jsx';
 import SurveySummary from './SurveySummary.jsx';
 import surveySchema from '../survey_schema.json';
-import {navigationGroups,groupActivities} from './navigationGroups.mjs';
+import {navigationGroups,groupActivities,allowedNavigationGroups} from './navigationGroups.mjs';
 import {average} from './statistics.mjs';
 import {calculateCsi,calculateCsiFromStats,csiMethod} from './csi.mjs';
 import {dashboardMetrics,activityGroup,activityGroupLabels} from './dashboardMetrics.mjs';
@@ -115,6 +115,9 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const [profileData, setProfileData] = useState({username:'',nama:'',role:'viewer',email:'',instansi:'',kampus:'Telkom University'});
       const isAdmin = profileData.role === 'admin';
       const isOperator=profileData.role==='operator';
+      const isScopedOperator=['asrama','ppkpt'].includes(profileData.role);
+      const allowedGroups=allowedNavigationGroups(profileData.role);
+      useEffect(()=>{if(!allowedGroups.some(group=>group.id===activeGroup)){setActiveGroup('overview');setActiveNav('dashboard');}},[profileData.role,activeGroup]);
       const canManageAccounts=isAdmin||isOperator;
       const canWrite = ['admin','operator','pengkar','asrama'].includes(profileData.role);
       const canEdit = (act) => canWrite && (!['pengkar','asrama'].includes(profileData.role) || act.program === (profileData.role==='asrama'?'Asrama':'Pengembangan Karakter'));
@@ -252,6 +255,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         });
       };
       const navigateGroup=(group,view)=>{
+        if(!allowedGroups.some(item=>item.id===group))return;
         setActiveGroup(group);setActiveNav(group==='overview'?'dashboard':view);setSidebarOpen(false);
         if(group!==activeGroup){
           setSearchNim('');setFilterYear('Semua Tahun');setFilterTw('Semua Triwulan');setFilterCategory('Semua Kategori');
@@ -477,15 +481,15 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
               {/* 4 MENU UTAMA */}
               <div className="p-4 space-y-1 text-xs">
                 <label htmlFor="user-group" className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block px-3 py-2">Grup Pengguna</label>
-                <select id="user-group" disabled={busy} value={activeGroup} onChange={event=>navigateGroup(event.target.value,'dashboard')} className="block w-full border border-slate-200 rounded-xl p-3 mb-3 bg-white font-bold text-slate-700">{navigationGroups.map(group=><option key={group.id} value={group.id}>{group.label}</option>)}</select>
+                <select id="user-group" disabled={busy} value={activeGroup} onChange={event=>navigateGroup(event.target.value,'dashboard')} className="block w-full border border-slate-200 rounded-xl p-3 mb-3 bg-white font-bold text-slate-700">{allowedGroups.map(group=><option key={group.id} value={group.id}>{group.label}</option>)}</select>
                 <nav aria-label={'Menu '+groupLabel} className="space-y-1">{[{id:'dashboard',label:'Dashboard',icon:'📊'},{id:'laporan',label:'Laporan',icon:'📝'}].filter(view=>activeGroup!=='overview'||view.id==='dashboard').map(view=><button key={view.id} type="button" disabled={busy} aria-current={activeNav===view.id?'page':undefined} onClick={()=>navigateGroup(activeGroup,view.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeNav===view.id?'bg-[#fde8e8] text-[#D71920]':'text-slate-600 hover:bg-slate-50'}`}><span className="text-base">{view.icon}</span>{view.label}</button>)}</nav>
 
-                <button
+                {canManageAccounts&&<button
                   disabled={!canManageAccounts} title={canManageAccounts?'':'Hanya Super Admin atau Operator KKA'} onClick={() => setActiveNav('pengaturanAdmin')}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeNav === 'pengaturanAdmin' ? 'bg-[#fde8e8] text-[#D71920]' : 'text-slate-600 hover:bg-slate-50'}`}
                 >
                   <span className="text-base">👥</span> Pengaturan Admin
-                </button>
+                </button>}
 
                 <button
                   onClick={() => {setActiveNav('pengaturan');setSidebarOpen(false);}}
@@ -527,8 +531,8 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {/* ========================================================================= */}
             {/* 1. MENU: DASHBOARD (PERSIS FOTO LAMPIRAN + ANALISIS SURVEY)               */}
             {/* ========================================================================= */}
-            {activeGroup==='ppk-telu'&&['dashboard','laporan'].includes(activeNav)&&<PpktDashboard view={activeNav} role={profileData.role} api={api} />}
-            {activeNav === 'dashboard' && activeGroup!=='ppk-telu' && (
+            {(activeGroup==='ppk-telu'||(activeGroup==='overview'&&profileData.role==='ppkpt'))&&['dashboard','laporan'].includes(activeNav)&&<PpktDashboard view={activeNav} role={profileData.role} api={api} />}
+            {activeNav === 'dashboard' && activeGroup!=='ppk-telu' && profileData.role!=='ppkpt' && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
                 {statsLoading&&!fullDataLoaded&&<p role="status" className="text-sm text-slate-500">Memuat ringkasan peserta dan survei…</p>}
                 <DashboardPdfButton title={activeGroup==='overview'?'Dashboard Keseluruhan':'Dashboard '+groupLabel} disabled={statsLoading||busy} />
@@ -752,7 +756,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {activeNav === 'laporan' && activeGroup!=='overview' && activeGroup!=='ppk-telu' && fullDataLoaded && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
 
-                {!isOperator&&activeGroup==='pengkar'&&<MigrationPanel activities={activities} role={profileData.role} api={api} reload={load} pendingSurveys={pendingSurveys} pendingParticipants={pendingParticipants} />}
+                {!isOperator&&!isScopedOperator&&activeGroup==='pengkar'&&<MigrationPanel activities={activities} role={profileData.role} api={api} reload={load} pendingSurveys={pendingSurveys} pendingParticipants={pendingParticipants} />}
                 {isAdmin&&activeGroup==='pengkar'&&<StudentRecap mode="master" rows={masterStudents} activities={activities} />}
                 <div className="bg-white border rounded-2xl p-4 space-y-3 text-xs no-print"><h3 className="font-bold">Filter Laporan</h3><div className="flex flex-wrap gap-3"><input aria-label="Cari laporan" placeholder="NIM / nama kegiatan" value={searchNim} onChange={e=>setSearchNim(e.target.value)} className="border rounded-lg p-2"/><select aria-label="Tahun laporan" value={filterYear} onChange={e=>setFilterYear(e.target.value)} className="border rounded-lg p-2"><option>Semua Tahun</option>{years.map(y=><option key={y}>{y}</option>)}</select><select aria-label="Triwulan laporan" value={filterTw} onChange={e=>setFilterTw(e.target.value)} className="border rounded-lg p-2"><option>Semua Triwulan</option>{['TW1','TW2','TW3','TW4'].map(q=><option key={q}>{q}</option>)}</select><select aria-label="Kategori laporan" value={filterCategory} onChange={e=>setFilterCategory(e.target.value)} className="border rounded-lg p-2"><option>Semua Kategori</option>{categories.map(c=><option key={c}>{c}</option>)}</select><button onClick={()=>{setSearchNim('');setFilterYear('Semua Tahun');setFilterTw('Semua Triwulan');setFilterCategory('Semua Kategori');}} className="border rounded-lg p-2">Reset Filter</button></div></div>
                 {/* FORM INPUT KEGIATAN 16 FIELD MASTER PERSIS GAMBAR LAMPIRAN */}
@@ -766,7 +770,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                     </p>
                   </div>
 
-                  {activeGroup==='asrama'&&['admin','asrama'].includes(profileData.role)&&<AsramaCategoryReview api={api} reload={load} />}
+                  {activeGroup==='asrama'&&isAdmin&&<AsramaCategoryReview api={api} reload={load} />}
 
                   {!canWrite && <p className="text-sm text-slate-500">Akun ini dapat membaca laporan. Input kegiatan tersedia untuk operator dan administrator.</p>}
                   {canWrite && <form onSubmit={handleSaveActivity} className="space-y-6 text-xs">
@@ -1133,7 +1137,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                   <div className="flex flex-wrap justify-between items-center gap-3 text-xs text-slate-600"><p>Menampilkan {filteredActivities.length?activityStart+1:0}–{Math.min(activityStart+activityLimit,filteredActivities.length)} dari {filteredActivities.length} kegiatan. Ekspor tetap memuat semua hasil filter.</p><nav aria-label="Halaman daftar kegiatan" className="flex gap-3 items-center"><button disabled={currentActivityPage===1} onClick={()=>setActivityPage(currentActivityPage-1)} className="border rounded-lg p-2">Sebelumnya</button><span>Halaman {currentActivityPage} dari {activityPages}</span><button disabled={currentActivityPage===activityPages} onClick={()=>setActivityPage(currentActivityPage+1)} className="border rounded-lg p-2">Berikutnya</button></nav></div>
                 </div>
 
-              {!isOperator&&<SurveySummary surveys={filteredSurveys} activities={filteredActivities} />}
+              {!isOperator&&!isScopedOperator&&<SurveySummary surveys={filteredSurveys} activities={filteredActivities} />}
               <StudentRecap rows={filteredStudents} activities={filteredActivities} />
               </main>
             )}

@@ -787,6 +787,33 @@ def main():
                     assert next(activity for activity in snapshot['activities'] if activity['id']==ident)['kategori']==category
                 expect(review).to_contain_text('1 perlu diperiksa')
                 print('PASS: review old Asrama categories, preserve unknown titles for explicit choice, apply suggestions and manual assignments')
+                for role,group in [('asrama','asrama'),('ppkpt','ppk-telu')]:
+                    role_password=secrets.token_urlsafe(24)
+                    result=page.request.post(url+'/api/dashboard/users',headers=category_auth,data={'username':'restricted-'+role,'nama':'Restricted '+role,'role':role,'password':role_password})
+                    assert result.status==201,result.text()
+                    restricted=browser.new_page(viewport={'width':1440,'height':1000})
+                    restricted.goto(url)
+                    restricted.get_by_label('Username',exact=True).fill('restricted-'+role)
+                    restricted.get_by_label('Password',exact=True).fill(role_password)
+                    restricted.get_by_role('button',name='Login',exact=True).click()
+                    selector=restricted.get_by_label('Grup Pengguna',exact=True)
+                    expect(selector).to_be_visible()
+                    assert selector.locator('option').evaluate_all('(options)=>options.map(option=>option.value)')==['overview',group]
+                    if role=='ppkpt':expect(restricted.get_by_text('Total Laporan',exact=True)).to_be_visible()
+                    else:expect(restricted.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
+                    selector.select_option(group)
+                    open_report(restricted)
+                    for label in ('Impor Database Kasus','Logo Satgas PPKPT','Pengaturan Admin'):
+                        expect(restricted.get_by_role('heading',name=label,exact=True)).to_have_count(0)
+                    expect(restricted.get_by_role('region',name='Migrasi data kegiatan dan survei',exact=True)).to_have_count(0)
+                    expect(restricted.get_by_role('region',name='Survei kepuasan 20 pertanyaan',exact=True)).to_have_count(0)
+                    expect(restricted.get_by_role('region',name='Kategorisasi data lama Asrama',exact=True)).to_have_count(0)
+                    if role=='asrama':
+                        expect(restricted.get_by_role('heading',name='Input Kegiatan Asrama',exact=True)).to_be_visible()
+                        expect(restricted.get_by_role('region',name='Daftar kegiatan tersimpan',exact=True)).not_to_contain_text('Kegiatan Uji Browser')
+                    else:expect(restricted.get_by_role('heading',name='Input Kasus Baru',exact=True)).to_be_visible()
+                    restricted.close()
+                print('PASS: restricted Asrama and PPKPT login, allowed groups, own reports, no migration/survey/admin tools')
                 massive_activity={**snapshot['activities'][0],'id':777001,'namaKegiatan':'Dashboard Data Besar','program':'Pengembangan Karakter','navigationGroup':'pengkar','kategori':'Pengembangan Karakter','tanggal':'2026-11-04','tahun':'2026','triwulan':'TW4','jumlahPeserta':25000}
                 massive={**snapshot,'activities':[massive_activity],'masterStudents':[],'pendingParticipants':[],'pendingSurveys':[],'adminList':[],
                     'students':[{'activityId':777001,'nim':str(870000000000+i),'nama':'Peserta Beban '+str(i),'prodi':'Informatika','fakultas':'FIF','kampus':'Bandung'} for i in range(25000)],

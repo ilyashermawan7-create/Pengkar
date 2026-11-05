@@ -243,6 +243,25 @@ class DashboardTests(unittest.TestCase):
         with server.connect() as c:
             self.assertEqual(c.execute('SELECT dashboard_role FROM users WHERE id=?',(ident,)).fetchone()[0],'ppkpt')
 
+    def test_scoped_operators_cannot_read_other_program_data_or_bypass_migration(self):
+        pengkar=self.create(self.activity(namaKegiatan='Private Pengkar'))
+        dorm=self.create(self.activity(namaKegiatan='Dorm Data',program='Asrama'))
+        for role,expected in (('asrama',[dorm]),('ppkpt',[])):
+            _,headers=self.new_user('scoped-'+role,role)
+            for compact in ('','?compact=true'):
+                data=self.client.get('/api/dashboard'+compact,headers=headers).json()
+                self.assertEqual([row['id'] for row in data['activities']],expected)
+                self.assertTrue(all(row['activityId'] in expected for row in data['students']+data['surveys']))
+                self.assertEqual(data['adminList'],[])
+            legacy=self.client.get('/api/activities',headers=headers).json()
+            self.assertEqual([row['id'] for row in legacy],expected)
+            self.assertEqual(self.client.get('/api/dashboard/search?query=Peserta',headers=headers).json()['activityIds'],expected)
+            self.assertEqual(self.client.post('/api/dashboard/stats',headers=headers,json={'activityIds':[pengkar]}).status_code,403)
+            self.assertEqual(self.client.put(f'/api/dashboard/activities/{pengkar}/surveys',headers=headers,json=[]).status_code,403)
+            self.assertEqual(self.client.post('/api/migrate/students',headers=headers,json={'items':[]}).status_code,403)
+        _,headers=self.new_user('scoped-dorm-cases','asrama')
+        self.assertEqual(self.client.get('/api/ppkt/cases',headers=headers).status_code,403)
+
     def test_ppkt_case_edit_and_validation_preserve_exact_source_status(self):
         result=self.client.post('/api/ppkt/cases',headers=self.headers,json={'caseNumber':'CASE-1','year':2024,'status':'Dengar Keterangan','notes':'Catatan asli'})
         self.assertEqual(result.status_code,201,result.text)

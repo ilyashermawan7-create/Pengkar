@@ -111,6 +111,7 @@ class Activity(BaseModel):
 FIELDS=['nama_kegiatan','tanggal','program','kategori','tempat','unit_kerjasama','pembicara','target_peserta','jumlah_peserta','anggaran','realisasi','laporan','kendala','tindak_lanjut','link_eviden','status']
 @app.get('/api/activities')
 def activities(program:str='',year:str='',status:str='',u=Depends(auth)):
+    if u['role']=='ppkpt':return []
     if u['role'] in ('pengkar','asrama'):
         permitted='Asrama' if u['role']=='asrama' else 'Pengembangan Karakter'
         if program and program!=permitted:return []

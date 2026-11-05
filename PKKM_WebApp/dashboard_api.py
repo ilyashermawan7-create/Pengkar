@@ -277,9 +277,10 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
         raise HTTPException(403,'Operator hanya dapat mengelola Operator Pengkar, Operator Asrama, dan Viewer')
 
     def migration_access(user=Depends(auth)):
-        if user['role']=='operator':raise HTTPException(403,'Menu migrasi tidak tersedia untuk Operator KKA')
+        if user['role'] in ('operator','asrama','ppkpt'):raise HTTPException(403,'Menu migrasi hanya tersedia untuk role yang berwenang')
 
     def visible(user, program):
+        if user['role']=='ppkpt':return False
         return user['role'] not in ('pengkar', 'asrama') or program == ('Asrama' if user['role'] == 'asrama' else 'Pengembangan Karakter')
 
     def profile(user):
@@ -353,6 +354,7 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
                 master.extend(dict(row,directoryId='nim:'+row['nim']) for row in c.execute('SELECT * FROM students') if row['nim'] not in known)
             pending=[dict(id=row['record_key'],**json.loads(row['payload'])) for row in c.execute('SELECT * FROM pending_surveys WHERE user_id=?',(user['id'],))]
             pending_participants=[dict(id=row['record_key'],**json.loads(row['payload'])) for row in c.execute('SELECT * FROM pending_participants WHERE user_id=?',(user['id'],))]
+            if user['role'] in ('asrama','ppkpt'):pending=[];pending_participants=[]
             users = []
             if user['role'] in ('admin','operator'):
                 users = [dict(id=r['id'], username=r['username'], nama=r['full_name'], email=r['email'],

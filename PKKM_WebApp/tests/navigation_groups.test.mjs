@@ -33,3 +33,10 @@ test('dorm categories support requested spelling aliases without inventing a cat
  assert.equal(asramaCategory('sosial'),'Sosial');
  assert.equal(asramaCategory('Pengembangan Karakter'),null);
 });
+
+import {allowedNavigationGroups} from '../frontend/navigationGroups.mjs';
+test('dorm and PPKPT operators only have overview and their own group',()=>{
+ assert.deepEqual(allowedNavigationGroups('asrama').map(group=>group.id),['overview','asrama']);
+ assert.deepEqual(allowedNavigationGroups('ppkpt').map(group=>group.id),['overview','ppk-telu']);
+ assert.equal(allowedNavigationGroups('admin').length,4);
+});

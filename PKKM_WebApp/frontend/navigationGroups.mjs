@@ -9,3 +9,5 @@ export function navigationGroup(activity){
   return null;
 }
 export const groupActivities=(activities,group)=>activities.filter(activity=>group==='overview'?['pengkar','asrama'].includes(navigationGroup(activity)):navigationGroup(activity)===group);
+
+export const allowedNavigationGroups=role=>navigationGroups.filter(group=>role==='asrama'?['overview','asrama'].includes(group.id):role==='ppkpt'?['overview','ppk-telu'].includes(group.id):true);
