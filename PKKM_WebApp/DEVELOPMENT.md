@@ -281,3 +281,19 @@ Endpoint GET/POST /api/dashboard/asrama/categories memeriksa role dan program,
 mempertahankan kategori yang sudah baku, menolak update bersamaan yang sudah
 berubah lewat expectedCategory, serta memvalidasi seluruh batch sebelum menulis.
 API ini tidak tersedia untuk Operator KKA, Pengkar, Viewer, maupun Verifikator.
+
+## Dashboard dengan data besar
+
+PrintReport tidak lagi dipasang tersembunyi pada setiap render dashboard.
+Komponen itu membangun tabel seluruh mahasiswa dan respons survei di DOM,
+meskipun display:none; puluhan ribu baris dapat membuat browser tampak putih
+atau macet saat login. Unduh PDF tetap melalui reportPdf.mjs dan hanya dibuat
+saat pengguna menekan Unduh PDF. Pemeriksaan browser mencakup 25.000 mahasiswa
+dan 32.000 respons dengan jumlah elemen halaman tetap di bawah 5.000.
+
+Permintaan API memiliki batas 45 detik, mencakup pembacaan body respons.
+Jika permintaan macet, AbortController mengembalikan pesan yang bisa dicoba
+ulang dan status busy login dilepas melalui finally. Form login menampilkan
+tahap pemeriksaan akun dan pemuatan dashboard; respons snapshot divalidasi
+sebelum state diisi agar body yang tidak lengkap tidak membuat render gagal.
+Tidak ada pengulangan otomatis permintaan tulis atau perubahan kredensial.

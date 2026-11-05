@@ -3,7 +3,7 @@
   "private": true,
   "version": "2.0.0",
   "scripts": {
-    "test:imports": "node tests/spreadsheet.test.mjs && node tests/migration.test.mjs && node tests/dashboard_metrics.test.mjs && node tests/csi.test.mjs && node tests/navigation_groups.test.mjs && node tests/monthly_activity_trend.test.mjs",
+    "test:imports": "node tests/spreadsheet.test.mjs && node tests/migration.test.mjs && node tests/dashboard_metrics.test.mjs && node tests/csi.test.mjs && node tests/navigation_groups.test.mjs && node tests/monthly_activity_trend.test.mjs && node tests/request_data.test.mjs",
     "build": "node frontend/copy-fonts.cjs && esbuild frontend/app.jsx --bundle --minify --outfile=static/app.js --legal-comments=linked && tailwindcss -i frontend/styles.css -o static/app.css --minify && node frontend/version-assets.cjs"
   },
   "dependencies": {

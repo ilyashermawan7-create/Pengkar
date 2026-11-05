@@ -708,6 +708,21 @@ def main():
                     assert next(activity for activity in snapshot['activities'] if activity['id']==ident)['kategori']==category
                 expect(review).to_contain_text('1 perlu diperiksa')
                 print('PASS: review old Asrama categories, preserve unknown titles for explicit choice, apply suggestions and manual assignments')
+                massive_activity={**snapshot['activities'][0],'id':777001,'namaKegiatan':'Dashboard Data Besar','program':'Pengembangan Karakter','navigationGroup':'pengkar','kategori':'Pengembangan Karakter','tanggal':'2026-11-04','tahun':'2026','triwulan':'TW4','jumlahPeserta':25000}
+                massive={**snapshot,'activities':[massive_activity],'masterStudents':[],'pendingParticipants':[],'pendingSurveys':[],'adminList':[],
+                    'students':[{'activityId':777001,'nim':str(870000000000+i),'nama':'Peserta Beban '+str(i),'prodi':'Informatika','fakultas':'FIF','kampus':'Bandung'} for i in range(25000)],
+                    'surveys':[{'id':i,'activityId':777001,'namaKegiatan':'Dashboard Data Besar','nim':str(870000000000+i),'answers':[4]*20,'saran':'Masukan tersimpan','skorTotal':4,'skorMateri':4,'skorNarasumber':4,'skorFasilitas':4,'skorDampakKarakter':4,'skorKepuasan':4} for i in range(32000)]}
+                massive_json=json.dumps(massive)
+                page.route('**/api/dashboard',lambda route:route.fulfill(status=200,content_type='application/json',body=massive_json))
+                started=time.monotonic()
+                page.reload()
+                expect(page.get_by_text('Total Peserta',exact=True).locator('..').locator('span').nth(1)).to_have_text('25.000',timeout=30000)
+                expect(page.get_by_text('CSI Bobot Setara',exact=True).first.locator('..')).to_contain_text('95.00%')
+                expect(page.locator('#pkkm-print-report')).to_have_count(0)
+                assert page.locator('body *').count()<5000
+                page.get_by_label('Tahun',exact=True).select_option('2026')
+                expect(page.get_by_text('Total Kegiatan',exact=True).locator('..').locator('span').nth(1)).to_have_text('1')
+                print('PASS: 25000 students and 32000 survey responses render without hidden report DOM; interactive dashboard in',round(time.monotonic()-started,2),'seconds')
                 assert not errors, errors
                 print('PASS: mobile navigation; no browser JavaScript errors')
                 browser.close()

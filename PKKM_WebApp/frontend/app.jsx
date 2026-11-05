@@ -3,11 +3,11 @@ import { createRoot } from 'react-dom/client';
 import Chart from 'chart.js/auto';
 import * as XLSX from 'xlsx';
 import {readParticipants} from './spreadsheet.mjs';
+import {requestData} from './requestData.mjs';
 import StudentRecap from './StudentRecap.jsx';
 import MonthlyActivityTrend from './MonthlyActivityTrend.jsx';
 import AsramaCategoryReview from './AsramaCategoryReview.jsx';
 import {asramaCategories,asramaCategory} from './asramaCategories.mjs';
-import PrintReport from './PrintReport.jsx';
 import {downloadReportPdf} from './reportPdf.mjs';
 import MigrationPanel from './MigrationPanel.jsx';
 import SurveySummary from './SurveySummary.jsx';
@@ -29,6 +29,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const [loginPass, setLoginPass] = useState('');
       const [showPass, setShowPass] = useState(false);
       const [loginError, setLoginError] = useState('');
+      const [loginStage,setLoginStage]=useState('');
 
       // 4 Menu Utama: 'dashboard' | 'laporan' | 'pengaturanAdmin' | 'pengaturan'
       const [activeNav, setActiveNav] = useState('dashboard');
@@ -55,11 +56,10 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const [sidebarOpen, setSidebarOpen] = useState(false);
       const [surveyActivityId, setSurveyActivityId] = useState('');
       const api = async (path, options={}, authToken=token) => {
-        const response = await fetch('/api' + path, {...options, headers: {
+        const {response,data} = await requestData('/api' + path, {...options, headers: {
           ...(options.body ? {'Content-Type':'application/json'} : {}),
           ...(authToken ? {Authorization:'Bearer '+authToken} : {})
         }});
-        const data = response.headers.get('content-type')?.includes('application/json') ? await response.json() : await response.text();
         if (!response.ok) {
           if (response.status === 401) {sessionStorage.removeItem('pkkm_token');setToken('');setIsLoggedIn(false);}
           throw new Error(typeof data.detail === 'string' ? data.detail : Array.isArray(data.detail) ? data.detail.map(e=>e.loc.slice(1).join('.')+': '+e.msg).join('; ') : 'Permintaan gagal ('+response.status+')');
@@ -68,6 +68,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       };
       const load = async (authToken=token) => {
         const data = await api('/dashboard', {}, authToken);
+        if(!data||!Array.isArray(data.activities)||!Array.isArray(data.students)||!Array.isArray(data.surveys)||!data.profile)throw new Error('Data dashboard belum tersedia lengkap. Silakan coba kembali.');
         setActivities(data.activities);setStudents(data.students);setSurveys(data.surveys);setMasterStudents(data.masterStudents||[]);setPendingSurveys(data.pendingSurveys||[]);setPendingParticipants(data.pendingParticipants||[]);
         setAdminList(data.adminList);setProfileData(data.profile);return data;
       };
@@ -156,12 +157,13 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         return ()=>{pieInstance.current?.destroy();barInstance.current?.destroy();};
       }, [isLoggedIn,activeNav,activeGroup,activities,students,searchNim,filterYear,filterTw,filterCategory]);
       const handleInitialLogin = async (e) => {
-        e.preventDefault();setLoginError('');setBusy(true);
+        e.preventDefault();setLoginError('');setLoginStage('Memeriksa akun…');setBusy(true);
         try {
           const result=await api('/login',{method:'POST',body:JSON.stringify({username:loginUser,password:loginPass})},'');
+          setLoginStage('Memuat dashboard…');
           await load(result.token);sessionStorage.setItem('pkkm_token',result.token);setToken(result.token);
           setIsLoggedIn(true);setActiveNav('dashboard');setActiveGroup('pengkar');setLoginPass('');
-        } catch(error) {setLoginError(error.message);} finally {setBusy(false);}
+        } catch(error) {setLoginError(error.message);} finally {setBusy(false);setLoginStage('');}
       };
       const handleLogout = async () => {
         try {await api('/logout',{method:'POST'});} catch {}
@@ -378,11 +380,12 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                   </div>
 
                   <button
-                    type="submit" disabled={busy}
+                    type="submit" disabled={busy} aria-label="Login"
                     className="w-full py-3 bg-[#b91c1c] hover:bg-[#991b1b] text-white font-bold rounded-lg text-sm shadow-md transition-all tracking-wide"
                   >
-                    Login
+                    {busy?'Sedang masuk…':'Login'}
                   </button>
+                  {loginStage&&<p role="status" className="text-sm text-slate-500">{loginStage}</p>}
                 </form>
 
                 <div className="relative flex py-2 items-center">
@@ -427,9 +430,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       // =========================================================================
       return (
         <div className="min-h-screen flex bg-[#f8f9fa] text-slate-800">
-          <PrintReport activities={filteredActivities} students={filteredStudents} surveys={filteredSurveys}
-            filters={{year:filterYear,quarter:filterTw,category:groupLabel+' / '+filterCategory,search:searchNim}}
-            preparedBy={profileData.nama} />
+
 
           {/* SIDEBAR KIRI */}
           <aside className={`${sidebarOpen ? "flex" : "hidden"} md:flex fixed inset-y-0 left-0 z-40 md:static w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 shadow-sm min-h-screen`}>
