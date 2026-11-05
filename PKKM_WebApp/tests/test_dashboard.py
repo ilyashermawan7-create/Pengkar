@@ -21,7 +21,7 @@ class DashboardTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(server.app)
         with server.connect() as c:
-            for table in ('pending_participants','activity_unidentified_participants','pending_surveys','student_directory','survey_responses','activity_participants','activity_details','students',
+            for table in ('ppkt_cases','pending_participants','activity_unidentified_participants','pending_surveys','student_directory','survey_responses','activity_participants','activity_details','students',
                           'evaluations','activities','audit','sessions','users'):
                 c.execute(f'DELETE FROM {table}')
             c.execute('INSERT INTO users(username,password_hash,full_name,role) VALUES(?,?,?,?)',
@@ -125,6 +125,43 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(student['prodi'],'Informatika')
             self.assertEqual(student['fakultas'],'FIF')
             self.assertEqual(student['kampus'],'Bandung')
+
+    def test_ppkt_import_summary_duplicates_and_missing_fields(self):
+        items=[{'caseNumber':'TEST-1','year':2024,'reportDate':'2024-11-05','category':'Psikis','status':'Tutup Kasus','bap':True,'reporterCounseling':False},
+               {'caseNumber':'TEST-2','year':2025,'bap':False},
+               {'caseNumber':'TEST-3','year':2025,'status':'SK Pencabutan kasus'},
+               {'caseNumber':'TEST-4','year':2025,'status':'Dengar Keterangan'}]
+        response=self.client.post('/api/ppkt/import',headers=self.headers,json={'items':items})
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()['created'],4)
+        self.assertEqual(self.client.post('/api/ppkt/import',headers=self.headers,json={'items':items}).json()['skipped'],4)
+        data=self.client.get('/api/ppkt/summary',headers=self.headers).json()
+        self.assertEqual([data[key] for key in ('total','closed','withdrawn','ongoing','unknownStatus','missingDate')],[4,1,1,1,1,3])
+        self.assertEqual(data['workflow']['bap'],{'yes':1,'no':1,'unknown':2})
+        self.assertNotIn('TEST-1',str(data))
+        self.assertEqual(self.client.get('/api/ppkt/summary?year=2024',headers=self.headers).json()['total'],1)
+        self.assertEqual(self.client.get('/api/ppkt/summary?status=Dalam+proses',headers=self.headers).json()['total'],1)
+        self.assertEqual(self.snapshot()['activities'],[])
+
+    def test_ppkt_permissions_separate_summary_from_sensitive_case_data(self):
+        for role in ('operator','viewer','pengkar','asrama','verifier'):
+            _,headers=self.new_user('ppkt'+role,role)
+            self.assertEqual(self.client.get('/api/ppkt/summary',headers=headers).status_code,200 if role in ('operator','viewer') else 403)
+            self.assertEqual(self.client.get('/api/ppkt/cases',headers=headers).status_code,403)
+            self.assertEqual(self.client.post('/api/ppkt/import',headers=headers,json={'items':[{'caseNumber':'TEST'}]}).status_code,403)
+            self.assertEqual(self.client.post('/api/ppkt/cases',headers=headers,json={'caseNumber':'TEST'}).status_code,403)
+        self.assertEqual(self.client.get('/api/ppkt/summary').status_code,401)
+
+    def test_ppkt_case_edit_and_validation_preserve_exact_source_status(self):
+        result=self.client.post('/api/ppkt/cases',headers=self.headers,json={'caseNumber':'CASE-1','year':2024,'status':'Dengar Keterangan','notes':'Catatan asli'})
+        self.assertEqual(result.status_code,201,result.text)
+        ident=result.json()['id']
+        self.assertEqual(self.client.post('/api/ppkt/cases',headers=self.headers,json={'caseNumber':'case-1'}).status_code,409)
+        self.assertEqual(self.client.put('/api/ppkt/cases/'+str(ident),headers=self.headers,json={'caseNumber':'CASE-1','year':2024,'status':'Tutup Kasus','notes':'Catatan tetap tersimpan'}).status_code,200)
+        data=self.client.get('/api/ppkt/cases',headers=self.headers).json()['items'][0]
+        self.assertEqual(data['notes'],'Catatan tetap tersimpan')
+        self.assertEqual(self.client.get('/api/ppkt/summary',headers=self.headers).json()['closed'],1)
+        self.assertEqual(self.client.post('/api/ppkt/import',headers=self.headers,json={'items':[{'caseNumber':'X','year':2024,'reportDate':'2025-01-01'}]}).status_code,422)
 
     def test_startup_categorizes_only_clear_dorm_records_once_with_history(self):
         target=self.create(self.activity(namaKegiatan='Kegiatan Iftar SR',program='Asrama',kategori='Pengkar Asrama'))

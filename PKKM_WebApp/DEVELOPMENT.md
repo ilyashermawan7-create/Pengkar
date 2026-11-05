@@ -297,3 +297,26 @@ ulang dan status busy login dilepas melalui finally. Form login menampilkan
 tahap pemeriksaan akun dan pemuatan dashboard; respons snapshot divalidasi
 sebelum state diisi agar body yang tidak lengkap tidak membuat render gagal.
 Tidak ada pengulangan otomatis permintaan tulis atau perubahan kredensial.
+
+## Database kasus PPK Tel-U
+
+Grup PPK Tel-U memakai PpktDashboard dan API /api/ppkt/*, bukan dashboard
+kegiatan/CSI. Tabel ppkt_cases terpisah dari kegiatan, mahasiswa, dan survei.
+Input/import/export mengikuti 19 kolom Kasus PPKPT.xlsx; DD/MM/YYYY, boolean
+TRUE/FALSE dan konseling YA/TIDAK dikenali. Nilai kosong tetap kosong. Nomor
+Kasus dinormalisasi sebagai kunci unik; impor ulang melewati kasus yang sudah
+ada dan tidak menimpa status. Edit kasus dilakukan terpisah dengan audit.
+
+Dashboard berisi rekap tahunan/bulanan, kategori, status asli dan ringkas,
+progres BAP/surat tugas/fakultas/direktorat, serta konseling. Tanggal kosong
+tidak dimasukkan ke tren bulanan. Status Tutup Kasus/Selesai dihitung ditutup,
+Tarik Kasus/SK Pencabutan Kasus dihitung ditarik/dicabut, status kosong tidak
+digabungkan ke dalam proses. Status lainnya menjadi dalam proses; teks asli
+tetap disimpan. Tiga filter: tahun, kategori, kelompok status.
+
+Super Admin mengelola dan mengekspor rincian, termasuk nomor dan keterangan.
+Operator KKA dan Viewer hanya memperoleh agregat dashboard; Operator Pengkar,
+Operator Asrama dan Verifikator tidak memperoleh API kasus. Respons dashboard
+agregat tidak memuat nomor kasus atau narasi pribadi. Workbook pengguna dan
+baris kasus tidak disimpan dalam repositori; unggah satu kali melalui PPK
+Tel-U → Laporan → Impor Database Kasus setelah deployment.

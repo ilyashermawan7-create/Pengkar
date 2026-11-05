@@ -7,6 +7,7 @@ import {requestData} from './requestData.mjs';
 import StudentRecap from './StudentRecap.jsx';
 import MonthlyActivityTrend from './MonthlyActivityTrend.jsx';
 import AsramaCategoryReview from './AsramaCategoryReview.jsx';
+import PpktDashboard from './PpktDashboard.jsx';
 import {asramaCategories,asramaCategory} from './asramaCategories.mjs';
 import {downloadReportPdf} from './reportPdf.mjs';
 import MigrationPanel from './MigrationPanel.jsx';
@@ -502,7 +503,8 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {/* ========================================================================= */}
             {/* 1. MENU: DASHBOARD (PERSIS FOTO LAMPIRAN + ANALISIS SURVEY)               */}
             {/* ========================================================================= */}
-            {activeNav === 'dashboard' && (
+            {activeGroup==='ppk-telu'&&['dashboard','laporan'].includes(activeNav)&&<PpktDashboard view={activeNav} role={profileData.role} api={api} />}
+            {activeNav === 'dashboard' && activeGroup!=='ppk-telu' && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
                 {activeGroup==='overview'&&<div className="bg-white border border-slate-200 rounded-2xl p-5"><h1 className="font-bold text-lg">Dashboard Keseluruhan</h1><p className="text-xs text-slate-500 mt-1">Gabungan kegiatan Pengembangan Karakter, PPKPT, dan Asrama beserta peserta dan surveinya, sesuai hak akses akun.</p></div>}
 
@@ -720,7 +722,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {/* ========================================================================= */}
             {/* 2. MENU: LAPORAN (INPUT DATA KEGIATAN PERSIS FOTO + IMPORT MAHASISWA & SURVEY) */}
             {/* ========================================================================= */}
-            {activeNav === 'laporan' && activeGroup!=='overview' && (
+            {activeNav === 'laporan' && activeGroup!=='overview' && activeGroup!=='ppk-telu' && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
 
                 {!isOperator&&activeGroup==='pengkar'&&<MigrationPanel activities={activities} role={profileData.role} api={api} reload={load} pendingSurveys={pendingSurveys} pendingParticipants={pendingParticipants} />}

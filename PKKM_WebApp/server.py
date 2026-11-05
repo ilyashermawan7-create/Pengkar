@@ -209,6 +209,9 @@ def audit_log(u=Depends(auth)):
     with connect() as c:return [dict(r) for r in c.execute('SELECT a.*,u.username FROM audit a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.id DESC LIMIT 100')]
 
 register(app,connect,auth,allow,audit,hash_password,check_password)
+from ppkt_api import initialize as initialize_ppkt,register as register_ppkt
+initialize_ppkt(connect)
+register_ppkt(app,connect,auth,audit)
 
 app.mount('/static',StaticFiles(directory=BASE/'static'),name='static')
 @app.get('/')
