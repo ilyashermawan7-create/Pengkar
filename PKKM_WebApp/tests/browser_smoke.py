@@ -55,6 +55,8 @@ def main():
                 browser = playwright.chromium.launch(executable_path=os.environ.get('CHROMIUM_PATH') or shutil.which('chromium'),args=['--no-sandbox'])
                 page = browser.new_page(viewport={'width':1440,'height':1000},accept_downloads=True)
                 errors = []
+                dashboard_requests=[]
+                page.on('request',lambda request:dashboard_requests.append(request.url) if request.method=='GET' and request.url.startswith(url+'/api/dashboard') else None)
                 page.on('pageerror',lambda error:errors.append(str(error)))
                 page.goto(url)
                 expect(page.get_by_text('PKKM Sign In',exact=True)).to_be_visible()
@@ -67,8 +69,12 @@ def main():
                 page.get_by_role('button',name='Login',exact=True).click()
                 expect(page.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
                 print('PASS: real login rejects wrong password and accepts stored account')
+                assert url+'/api/dashboard?compact=true' in dashboard_requests
+                assert url+'/api/dashboard' not in dashboard_requests
                 page.get_by_role('button',name='Laporan',exact=False).first.click()
                 page.get_by_label('Nama Kegiatan',exact=True).fill('Kegiatan Uji Browser')
+                assert dashboard_requests.count(url+'/api/dashboard')==1
+                print('PASS: login fetches only compact snapshot; full details are fetched once when opening Laporan')
                 page.get_by_label('Tanggal Kegiatan',exact=True).fill('2026-11-04')
                 page.get_by_label('Honor Pembicara (Rp)',exact=True).fill('Rp 250.000')
                 with page.expect_download() as participant_template:
@@ -731,7 +737,7 @@ def main():
                     'students':[{'activityId':777001,'nim':str(870000000000+i),'nama':'Peserta Beban '+str(i),'prodi':'Informatika','fakultas':'FIF','kampus':'Bandung'} for i in range(25000)],
                     'surveys':[{'id':i,'activityId':777001,'namaKegiatan':'Dashboard Data Besar','nim':str(870000000000+i),'answers':[4]*20,'saran':'Masukan tersimpan','skorTotal':4,'skorMateri':4,'skorNarasumber':4,'skorFasilitas':4,'skorDampakKarakter':4,'skorKepuasan':4} for i in range(32000)]}
                 massive_json=json.dumps(massive)
-                page.route('**/api/dashboard',lambda route:route.fulfill(status=200,content_type='application/json',body=massive_json))
+                page.route('**/api/dashboard?compact=true',lambda route:route.fulfill(status=200,content_type='application/json',body=massive_json))
                 started=time.monotonic()
                 page.reload()
                 expect(page.get_by_text('Total Peserta',exact=True).locator('..').locator('span').nth(1)).to_have_text('25.000',timeout=30000)

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {calculateCsi,csiCategory} from '../frontend/csi.mjs';
+import {calculateCsi,calculateCsiFromStats,csiCategory} from '../frontend/csi.mjs';
 const row=answers=>({answers});
 test('complete equal-weight CSI follows MSS, WF, WS and divisors per group',()=>{
   const csi=calculateCsi([row(Array(20).fill(3)),row(Array(20).fill(5))]);
@@ -38,4 +38,10 @@ test('only material and speaker groups use divisor five; the remaining groups us
   assert.deepEqual(csi.groups.map(group=>group.divisor),[5,5,4,4,4]);
   assert.deepEqual(csi.groups.map(group=>group.percent),[80,80,100,100,100]);
   assert.deepEqual(csi.items.filter(item=>item.divisor===5).map(item=>item.index+1),[1,2,3,4,20]);
+});
+
+test('compact sums and counts produce the same CSI and group percentages as individual answers',()=>{
+ const rows=[row(Array(20).fill(4)),row([1,null,2,...Array(17).fill(null)])];
+ const stats={responses:2,items:Array.from({length:20},(_,index)=>{const values=rows.map(row=>row.answers[index]).filter(value=>value!==null);return {sum:values.reduce((sum,value)=>sum+value,0),count:values.length};})};
+ assert.deepEqual(calculateCsiFromStats(stats),calculateCsi(rows));
 });

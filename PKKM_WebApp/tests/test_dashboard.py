@@ -126,6 +126,34 @@ class DashboardTests(unittest.TestCase):
             self.assertEqual(student['fakultas'],'FIF')
             self.assertEqual(student['kampus'],'Bandung')
 
+    def test_compact_dashboard_omits_individual_records_and_statistics_match_full_data(self):
+        first=self.create(self.activity(surveys=[{'nim':'123456789012','answers':[4]*20}]))
+        second=self.create(self.activity(namaKegiatan='Second',participants=[{'nim':'123456789012','nama':'Peserta Uji','fakultas':'FIF','kampus':'Bandung'}],surveys=[{'answers':[None,2]+[None]*18}]))
+        full=self.snapshot()
+        compact=self.client.get('/api/dashboard?compact=true',headers=self.headers)
+        self.assertEqual(compact.status_code,200)
+        data=compact.json();self.assertTrue(data['compact'])
+        for key in ('students','surveys','masterStudents','pendingParticipants','pendingSurveys'):self.assertEqual(data[key],[])
+        self.assertNotIn('Peserta Uji',compact.text)
+        self.assertEqual([row['skorSurvey'] for row in data['activities']],[row['skorSurvey'] for row in full['activities']])
+        result=self.client.post('/api/dashboard/stats',headers=self.headers,json={'activityIds':[first,second]}).json()
+        self.assertEqual(result['uniqueNim'],1)
+        self.assertEqual(result['faculties'],[['FIF',1]])
+        self.assertEqual(result['surveys']['responses'],2)
+        self.assertEqual(result['surveys']['items'][0],{'sum':4,'count':1})
+        self.assertEqual(result['surveys']['items'][1],{'sum':6,'count':2})
+        self.assertEqual(self.client.post('/api/dashboard/stats',headers=self.headers,json={'activityIds':[]}).json()['uniqueNim'],0)
+
+    def test_compact_statistics_and_search_keep_program_permissions(self):
+        first=self.create()
+        second=self.create(self.activity(program='Asrama'))
+        _,asrama=self.new_user('compactasrama','asrama')
+        response=self.client.get('/api/dashboard/search?query=123456',headers=asrama)
+        self.assertEqual(response.json()['activityIds'],[second])
+        self.assertEqual(self.client.post('/api/dashboard/stats',headers=asrama,json={'activityIds':[first]}).status_code,403)
+        self.assertEqual(self.client.get('/api/dashboard/search?query=Peserta',headers=self.headers).json()['activityIds'],[first,second])
+        self.assertEqual(self.client.post('/api/dashboard/stats',json={'activityIds':[first]}).status_code,401)
+
     def test_ppkt_import_summary_duplicates_and_missing_fields(self):
         items=[{'caseNumber':'TEST-1','year':2024,'reportDate':'2024-11-05','category':'Psikis','status':'Tutup Kasus','bap':True,'reporterCounseling':False},
                {'caseNumber':'TEST-2','year':2025,'bap':False},

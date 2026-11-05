@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse,JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from dashboard_aggregate import dashboard_stats
 from asrama_classification import canonical as dorm_category,suggest as suggest_dorm_category,is_dorm,categorize_legacy
 from participant_matching import activity_index,match as match_pending_activity,group_key as pending_group_key
 
@@ -175,6 +176,9 @@ class DashboardActivity(Input):
     surveys: list[Survey] = Field(default_factory=list, max_length=10000)
 
 
+class DashboardStatRequest(Input):
+    activityIds: list[int] = Field(default_factory=list,max_length=10000)
+
 class DormCategoryAssignment(Input):
     model_config = ConfigDict(allow_inf_nan=False,str_strip_whitespace=False)
     activityId: int = Field(gt=0)
@@ -304,13 +308,30 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
         result['skorSurvey'] = round(sum(scores)/len(scores), 2) if scores else (round(sum(legacy)/len(legacy), 2) if legacy else result.get('targetSurveyKepuasan'))
         return result
 
-    def build_snapshot(user):
+    def build_snapshot(user,compact=False):
         with connect() as c:
             rows = c.execute('''SELECT a.*,e.skor_materi,e.skor_narasumber,e.skor_fasilitas,e.skor_dampak
                 FROM activities a LEFT JOIN evaluations e ON e.activity_id=a.id ORDER BY a.tanggal DESC,a.id DESC''').fetchall()
             rows = [r for r in rows if visible(user, r['program'])]
             ids = {r['id'] for r in rows}
             details = {r['activity_id']: json.loads(r['payload']) for r in c.execute('SELECT * FROM activity_details') if r['activity_id'] in ids}
+            if compact:
+                activities=[converted(row,details,[]) for row in rows]
+                scores={row['activity_id']:row for row in c.execute("""SELECT activity_id,
+                    SUM(CASE WHEN json_array_length(payload,'$.answers')=20 THEN 1 ELSE 0 END) AS full_count,
+                    AVG(CASE WHEN json_array_length(payload,'$.answers')=20 THEN json_extract(payload,'$.skorTotal') END) AS full_score,
+                    AVG(json_extract(payload,'$.skorTotal')) AS legacy_score FROM survey_responses GROUP BY activity_id""") if row['activity_id'] in ids}
+                for activity in activities:
+                    score=scores.get(activity['id'])
+                    if score:
+                        value=score['full_score'] if score['full_count'] else score['legacy_score']
+                        if value is not None:activity['skorSurvey']=round(value,2)
+                users=[]
+                if user['role'] in ('admin','operator'):
+                    users=[dict(id=row['id'],username=row['username'],nama=row['full_name'],email=row['email'],role=row['dashboard_role'] or row['role'],status='Aktif' if row['active'] else 'Nonaktif') for row in c.execute('SELECT * FROM users ORDER BY id') if user['role']=='admin' or (row['dashboard_role'] or row['role']) in delegated_roles]
+                fields=('id','namaKegiatan','tanggal','tahun','triwulan','program','kategori','urusan','jenis','navigationGroup','jumlahPeserta','skorSurvey')
+                activities=[{key:item.get(key) for key in fields} for item in activities]
+                return dict(compact=True,activities=activities,students=[],surveys=[],masterStudents=[],pendingSurveys=[],pendingParticipants=[],adminList=users,profile=profile(user))
             surveys = [dict(Survey.model_validate_json(r['payload']).model_dump(mode='json'), id=r['id'], activityId=r['activity_id']) for r in c.execute('SELECT * FROM survey_responses') if r['activity_id'] in ids]
             by_activity = {}
             for survey in surveys:
@@ -339,10 +360,29 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             return dict(activities=activities, students=students, masterStudents=master,pendingSurveys=pending,pendingParticipants=pending_participants,surveys=surveys, adminList=users, profile=profile(user))
 
     @app.get('/api/dashboard')
-    def snapshot(user=Depends(auth)):
+    def snapshot(compact:bool=False,user=Depends(auth)):
         # Bypass FastAPI's recursive jsonable_encoder and whole-body JSON buffer.
         # Large participant imports previously produced multiple copies in RAM.
-        return StreamingResponse(stream_snapshot(lambda:build_snapshot(user)),media_type='application/json',headers={'Cache-Control':'no-store'})
+        if compact:return JSONResponse(build_snapshot(user,True),headers={'Cache-Control':'no-store'})
+        return StreamingResponse(stream_snapshot(lambda:build_snapshot(user,compact)),media_type='application/json',headers={'Cache-Control':'no-store'})
+
+    @app.get('/api/dashboard/search')
+    def search_dashboard_students(query:str='',user=Depends(auth)):
+        query=query.strip()
+        if len(query)>200:raise HTTPException(422,'Pencarian maksimal 200 karakter')
+        if not query:return {'activityIds':[]}
+        with connect() as c:
+            allowed={row['id'] for row in c.execute('SELECT id,program FROM activities') if visible(user,row['program'])}
+            ids={row['activity_id'] for row in c.execute("SELECT p.activity_id FROM activity_participants p JOIN students s ON s.nim=p.nim WHERE instr(lower(s.nim),lower(?))>0 OR instr(lower(s.nama),lower(?))>0",(query,query)) if row['activity_id'] in allowed}
+            ids.update(row['activity_id'] for row in c.execute("SELECT p.activity_id FROM activity_unidentified_participants p JOIN student_directory s ON s.record_key=p.record_key WHERE instr(lower(s.nim),lower(?))>0 OR instr(lower(s.nama),lower(?))>0",(query,query)) if row['activity_id'] in allowed)
+        return {'activityIds':sorted(ids)}
+
+    @app.post('/api/dashboard/stats')
+    def get_dashboard_stats(data:DashboardStatRequest,user=Depends(auth)):
+        with connect() as c:
+            allowed={row['id'] for row in c.execute('SELECT id,program FROM activities') if visible(user,row['program'])}
+            if not set(data.activityIds).issubset(allowed):raise HTTPException(403,'Kegiatan tidak tersedia atau di luar hak akses. Muat ulang dashboard')
+            return dashboard_stats(c,data.activityIds)
 
     def write_surveys(c, ident, surveys, user, notes=''):
         previous = c.execute('SELECT count(*) FROM survey_responses WHERE activity_id=?', (ident,)).fetchone()[0]

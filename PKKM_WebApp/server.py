@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 BASE=Path(__file__).resolve().parent
 DB=Path(os.getenv('PKKM_DB_PATH',str(BASE/'pkkm.sqlite3')))
 app=FastAPI(title='PKKM Telkom University API',version='1.0.0')
+from starlette.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware,minimum_size=1000,compresslevel=3)
 
 def connect():
     DB.parent.mkdir(parents=True,exist_ok=True)

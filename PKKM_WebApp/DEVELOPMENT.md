@@ -320,3 +320,26 @@ Operator Asrama dan Verifikator tidak memperoleh API kasus. Respons dashboard
 agregat tidak memuat nomor kasus atau narasi pribadi. Workbook pengguna dan
 baris kasus tidak disimpan dalam repositori; unggah satu kali melalui PPK
 Tel-U → Laporan → Impor Database Kasus setelah deployment.
+
+## Login dan statistik dashboard ringkas
+
+Login dan pemulihan sesi memakai GET /api/dashboard?compact=true. Respons
+hanya berisi kegiatan dengan kolom yang dibutuhkan dashboard, profil, serta
+daftar akun sesuai hak akses; mahasiswa, survei, master, dan antrean impor
+tidak ikut ditransfer. GET /api/dashboard tanpa compact tetap kompatibel dan
+baru dipanggil otomatis ketika Laporan kegiatan dibuka. Laporan kasus PPK
+Tel-U tetap memakai API terpisah tanpa memuat seluruh database kegiatan.
+
+POST /api/dashboard/stats menerima ID kegiatan terfilter, memeriksa cakupan
+program, lalu mengembalikan NIM unik, hitungan fakultas, jumlah respons, dan
+sum/count per pertanyaan. Frontend memakai rumus CSI yang sama atas agregat
+tersebut. NIM/nama pencarian pada dashboard ringkas dicari lewat GET
+/api/dashboard/search (debounce 250 ms) tanpa mengunduh identitas seluruh
+peserta. Data individu dan keterangan kasus tidak masuk ke statistik.
+
+Respons besar dikompresi gzip level 3; snapshot ringkas tidak menunggu lock
+pengiriman snapshot lengkap. Uji lokal dengan satu kegiatan, 25.000 mahasiswa,
+dan 32.000 survei: snapshot lengkap sekitar 19,6 MB (JSON sebelum kompresi),
+versus snapshot ringkas + statistik sekitar 1,4 KB. Auth 0,046 detik, snapshot
+ringkas 0,051 detik, statistik 0,367 detik. Angka bergantung volume kegiatan,
+lingkungan, dan jaringan; bukan pengukuran server produksi.

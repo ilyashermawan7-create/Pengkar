@@ -15,7 +15,7 @@ import SurveySummary from './SurveySummary.jsx';
 import surveySchema from '../survey_schema.json';
 import {navigationGroups,groupActivities} from './navigationGroups.mjs';
 import {average} from './statistics.mjs';
-import {calculateCsi,csiMethod} from './csi.mjs';
+import {calculateCsi,calculateCsiFromStats,csiMethod} from './csi.mjs';
 import {dashboardMetrics,activityGroup,activityGroupLabels} from './dashboardMetrics.mjs';
 import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './migration.mjs';
 
@@ -45,6 +45,12 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const [activityPage,setActivityPage]=useState(1);
       const [activities, setActivities] = useState([]);
       const [surveys, setSurveys] = useState([]);
+      const [fullDataLoaded,setFullDataLoaded]=useState(false);
+      const [dashboardStats,setDashboardStats]=useState(null);
+      const [statsLoading,setStatsLoading]=useState(false);
+      const [detailLoading,setDetailLoading]=useState(false);
+      const [detailRetry,setDetailRetry]=useState(0);
+      const [matchedActivityIds,setMatchedActivityIds]=useState([]);
       const [adminList, setAdminList] = useState([]);
       const [token, setToken] = useState(() => sessionStorage.getItem('pkkm_token') || '');
       const [busy, setBusy] = useState(false);
@@ -67,11 +73,11 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         }
         return data;
       };
-      const load = async (authToken=token) => {
-        const data = await api('/dashboard', {}, authToken);
+      const load = async (authToken=token,full=fullDataLoaded) => {
+        const data = await api(full?'/dashboard':'/dashboard?compact=true', {}, authToken);
         if(!data||!Array.isArray(data.activities)||!Array.isArray(data.students)||!Array.isArray(data.surveys)||!data.profile)throw new Error('Data dashboard belum tersedia lengkap. Silakan coba kembali.');
         setActivities(data.activities);setStudents(data.students);setSurveys(data.surveys);setMasterStudents(data.masterStudents||[]);setPendingSurveys(data.pendingSurveys||[]);setPendingParticipants(data.pendingParticipants||[]);
-        setAdminList(data.adminList);setProfileData(data.profile);return data;
+        setAdminList(data.adminList);setProfileData(data.profile);setFullDataLoaded(!data.compact);return data;
       };
       const run = async (operation) => {
         if (busy) return;
@@ -114,13 +120,19 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       useEffect(()=>{if(isOperator)setNewAdmin(previous=>({...previous,role:'pengkar'}));},[isOperator]);
       useEffect(() => {
         if (!token) return;
-        load(token).then(()=>setIsLoggedIn(true)).catch(error=>setLoginError(error.message));
+        load(token,false).then(()=>setIsLoggedIn(true)).catch(error=>setLoginError(error.message));
       }, []);
       useEffect(()=>{if(!editingId)setActivityForm({...freshForm(),...(profileData.role==='asrama'?{program:'Asrama',kategori:'Adaptif',urusan:'Asrama'}:{})});},[profileData.role,activeGroup]);
+      useEffect(()=>{
+        if(!isLoggedIn||fullDataLoaded||!searchNim.trim()){setMatchedActivityIds([]);return;}
+        let active=true;
+        const timer=setTimeout(()=>api('/dashboard/search?query='+encodeURIComponent(searchNim.trim())).then(data=>{if(active)setMatchedActivityIds(data.activityIds);}).catch(error=>{if(active)setNotice(error.message);}),250);
+        return()=>{active=false;clearTimeout(timer);};
+      },[searchNim,isLoggedIn,fullDataLoaded,token]);
       const scopedActivities=groupActivities(activities,activeGroup);
       const filteredActivities = scopedActivities.filter(act => {
         const query=searchNim.trim().toLowerCase();
-        return (!query || act.namaKegiatan.toLowerCase().includes(query) || students.some(s=>s.activityId===act.id && (s.nim.includes(query)||s.nama.toLowerCase().includes(query))))
+        return (!query || act.namaKegiatan.toLowerCase().includes(query) || (fullDataLoaded?students.some(s=>s.activityId===act.id && (s.nim.includes(query)||s.nama.toLowerCase().includes(query))):matchedActivityIds.includes(act.id)))
           && (filterYear==='Semua Tahun'||act.tahun===filterYear)
           && (filterTw==='Semua Triwulan'||act.triwulan===filterTw)
           && (filterCategory==='Semua Kategori'||(activeGroup==='asrama'?asramaCategory(act.kategori):act.kategori)===filterCategory);
@@ -132,14 +144,31 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const activityStart=(currentActivityPage-1)*activityLimit;
       const pagedActivities=filteredActivities.slice(activityStart,activityStart+activityLimit);
       const visibleIds = new Set(filteredActivities.map(a=>a.id));
+      const statsKey=[...visibleIds].sort((a,b)=>a-b).join(',');
+      useEffect(()=>{
+        if(!isLoggedIn||activeNav!=='dashboard'||activeGroup==='ppk-telu'||fullDataLoaded)return;
+        let active=true;setStatsLoading(true);setDashboardStats(null);
+        api('/dashboard/stats',{method:'POST',body:JSON.stringify({activityIds:[...visibleIds]})}).then(data=>{if(active)setDashboardStats(data);}).catch(error=>{if(active)setNotice(error.message);}).finally(()=>{if(active)setStatsLoading(false);});
+        return()=>{active=false;};
+      },[statsKey,isLoggedIn,activeNav,activeGroup,fullDataLoaded,token]);
+      useEffect(()=>{
+        if(!isLoggedIn||activeNav!=='laporan'||activeGroup==='ppk-telu'||fullDataLoaded)return;
+        let active=true;setDetailLoading(true);setNotice('');
+        api('/dashboard').then(data=>{
+          if(!active)return;
+          if(!Array.isArray(data.activities)||!Array.isArray(data.students)||!Array.isArray(data.surveys))throw Error('Rincian laporan belum lengkap. Silakan muat ulang.');
+          setActivities(data.activities);setStudents(data.students);setSurveys(data.surveys);setMasterStudents(data.masterStudents||[]);setPendingSurveys(data.pendingSurveys||[]);setPendingParticipants(data.pendingParticipants||[]);setAdminList(data.adminList||[]);setFullDataLoaded(true);
+        }).catch(error=>{if(active)setNotice(error.message);}).finally(()=>{if(active)setDetailLoading(false);});
+        return()=>{active=false;};
+      },[isLoggedIn,activeNav,activeGroup,fullDataLoaded,detailRetry,token]);
       const filteredStudents=students.filter(s=>visibleIds.has(s.activityId));
       const filteredSurveys=surveys.filter(s=>visibleIds.has(s.activityId));
       const years=[...new Set([...scopedActivities.map(a=>a.tahun).filter(Boolean),String(new Date().getFullYear())])].sort().reverse();
       const categories=activeGroup==='asrama'?asramaCategories:[...new Set(['Pengembangan Karakter','Wawasan Kebangsaan','Konseling','Kesehatan Mental','PPKPT',...scopedActivities.map(a=>a.kategori)])].filter(category=>activeGroup!=='pengkar'||!/asrama/i.test(category));
       const mean = average;
-      const csi=calculateCsi(filteredSurveys);
+      const csi=fullDataLoaded?calculateCsi(filteredSurveys):calculateCsiFromStats(dashboardStats?.surveys);
       const surveyMetrics=csi.groups.map(group=>({label:group.label,divisor:group.divisor,val:group.percent===null?'—':group.percent.toFixed(1)+'%',skor:group.score===null?'—':group.score.toFixed(2),status:group.status}));
-      const facultyCounts=Object.entries([...new Map(filteredStudents.map(s=>[s.nim||s.directoryId,s])).values()].reduce((acc,s)=>{const key=s.fakultas||'Belum diisi';acc[key]=(acc[key]||0)+1;return acc;},{})).sort((a,b)=>b[1]-a[1]);
+      const facultyCounts=fullDataLoaded?Object.entries([...new Map(filteredStudents.map(s=>[s.nim||s.directoryId,s])).values()].reduce((acc,s)=>{const key=s.fakultas||'Belum diisi';acc[key]=(acc[key]||0)+1;return acc;},{})).sort((a,b)=>b[1]-a[1]):(dashboardStats?.faculties||[]);
 
       // Ref Chart Dashboard
       const pieChartRef = useRef(null);
@@ -162,13 +191,13 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         try {
           const result=await api('/login',{method:'POST',body:JSON.stringify({username:loginUser,password:loginPass})},'');
           setLoginStage('Memuat dashboard…');
-          await load(result.token);sessionStorage.setItem('pkkm_token',result.token);setToken(result.token);
+          await load(result.token,false);sessionStorage.setItem('pkkm_token',result.token);setToken(result.token);
           setIsLoggedIn(true);setActiveNav('dashboard');setActiveGroup('pengkar');setLoginPass('');
         } catch(error) {setLoginError(error.message);} finally {setBusy(false);setLoginStage('');}
       };
       const handleLogout = async () => {
         try {await api('/logout',{method:'POST'});} catch {}
-        sessionStorage.removeItem('pkkm_token');setToken('');setIsLoggedIn(false);setActivities([]);setStudents([]);setMasterStudents([]);setPendingSurveys([]);setPendingParticipants([]);setSurveys([]);setAdminList([]);setNotice('');resetActivity();
+        sessionStorage.removeItem('pkkm_token');setToken('');setIsLoggedIn(false);setFullDataLoaded(false);setDashboardStats(null);setActivities([]);setStudents([]);setMasterStudents([]);setPendingSurveys([]);setPendingParticipants([]);setSurveys([]);setAdminList([]);setNotice('');resetActivity();
       };
 
       // Lookup Mahasiswa
@@ -420,7 +449,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const metrics=dashboardMetrics(filteredActivities);
       const totalPeserta=metrics.participants;
       const totalKegiatan=metrics.total;
-      const totalPesertaUnik=new Set(filteredStudents.map(s=>s.nim).filter(Boolean)).size;
+      const totalPesertaUnik=fullDataLoaded?new Set(filteredStudents.map(s=>s.nim).filter(Boolean)).size:(dashboardStats?.uniqueNim??'—');
       const rasioMahasiswa=metrics.ratio.toFixed(2);
       const totalKegiatanKarakter=metrics.groups.karakter;
       const totalKegiatanPPKPT=metrics.groups.ppkpt;
@@ -506,6 +535,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {activeGroup==='ppk-telu'&&['dashboard','laporan'].includes(activeNav)&&<PpktDashboard view={activeNav} role={profileData.role} api={api} />}
             {activeNav === 'dashboard' && activeGroup!=='ppk-telu' && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
+                {statsLoading&&!fullDataLoaded&&<p role="status" className="text-sm text-slate-500">Memuat ringkasan peserta dan survei…</p>}
                 {activeGroup==='overview'&&<div className="bg-white border border-slate-200 rounded-2xl p-5"><h1 className="font-bold text-lg">Dashboard Keseluruhan</h1><p className="text-xs text-slate-500 mt-1">Gabungan kegiatan Pengembangan Karakter, PPKPT, dan Asrama beserta peserta dan surveinya, sesuai hak akses akun.</p></div>}
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -646,7 +676,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                           <span className="text-[10px] text-slate-400">Sesuai filter</span>
                         </div>
                         <div className="space-y-2.5 my-auto py-2 text-xs">
-                          {facultyCounts.length===0 && <p className="text-slate-400 py-6">Belum ada daftar peserta. Impor berkas peserta pada menu Laporan.</p>}
+                          {facultyCounts.length===0 && <p className="text-slate-400 py-6">{statsLoading&&!fullDataLoaded?'Memuat ringkasan mahasiswa…':'Belum ada daftar peserta. Impor berkas peserta pada menu Laporan.'}</p>}
                           {facultyCounts.map(([name,count],index)=><div key={name}>
                             <div className="flex justify-between text-[11px] mb-1 font-semibold"><span>{name}</span><span className="text-[#D71920]">{count.toLocaleString('id-ID')} Mhs</span></div>
                             <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden"><div className={index===0?'bg-[#D71920] h-full rounded-full':'bg-slate-600 h-full rounded-full'} style={{width:(count/Math.max(1,...facultyCounts.map(f=>f[1]))*100)+'%'}} /></div>
@@ -689,7 +719,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                         Analisis Hasil Survey Kepuasan Kegiatan Mahasiswa
                       </h2>
                       <p className="text-xs text-slate-500">
-                        Evaluasi komprehensif berdasarkan {filteredSurveys.length} respons mahasiswa peserta kegiatan pembinaan karakter.
+                        Evaluasi komprehensif berdasarkan {fullDataLoaded?filteredSurveys.length:(dashboardStats?.surveys.totalResponses??'…')} respons mahasiswa peserta kegiatan pembinaan karakter.
                       </p>
                       <p className="text-xs text-slate-500 mt-1">{csi.responses} respons instrumen 20 pertanyaan · {csi.coverage}/20 pertanyaan memiliki nilai. {csi.provisional?'Hasil sementara; data belum lengkap.':'Seluruh pertanyaan terwakili.'}</p>
                       <details className="text-xs text-slate-500 mt-2"><summary className="cursor-pointer">Metode perhitungan CSI dan kategori</summary><p>{csiMethod}</p><p>Kategori operasional CSI: ≤35% tidak puas; &gt;35–50% kurang puas; &gt;50–65% cukup puas; &gt;65–80% puas; &gt;80% sangat puas. Ambang kategori adalah konvensi pelaporan, bukan standar universal.</p></details>
@@ -722,7 +752,8 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {/* ========================================================================= */}
             {/* 2. MENU: LAPORAN (INPUT DATA KEGIATAN PERSIS FOTO + IMPORT MAHASISWA & SURVEY) */}
             {/* ========================================================================= */}
-            {activeNav === 'laporan' && activeGroup!=='overview' && activeGroup!=='ppk-telu' && (
+            {activeNav==='laporan'&&activeGroup!=='ppk-telu'&&!fullDataLoaded&&<main className="p-8 space-y-3"><p role="status">{detailLoading?'Memuat rincian laporan…':'Rincian laporan belum dimuat.'}</p>{!detailLoading&&<button onClick={()=>setDetailRetry(detailRetry+1)} className="border rounded-lg p-3">Coba Muat Ulang Laporan</button>}</main>}
+            {activeNav === 'laporan' && activeGroup!=='overview' && activeGroup!=='ppk-telu' && fullDataLoaded && (
               <main className="p-6 md:p-8 space-y-6 max-w-[1440px] mx-auto w-full">
 
                 {!isOperator&&activeGroup==='pengkar'&&<MigrationPanel activities={activities} role={profileData.role} api={api} reload={load} pendingSurveys={pendingSurveys} pendingParticipants={pendingParticipants} />}
