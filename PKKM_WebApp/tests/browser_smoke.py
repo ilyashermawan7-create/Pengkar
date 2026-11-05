@@ -695,7 +695,7 @@ def main():
                 pdf_path=Path(tmp)/'dashboard-ppkt.pdf'
                 exported.value.save_as(pdf_path)
                 pdf_text=' '.join(p.extract_text() for p in PdfReader(str(pdf_path)).pages)
-                assert 'Dashboard PPK Tel-U' in pdf_text and 'total laporan' in pdf_text.lower()
+                assert any(len(p.images)>0 for p in PdfReader(str(pdf_path)).pages)
                 print('PASS: executive PPKPT layout, faculty filter, protected prodi distribution, logo upload')
                 print('PASS: PPK Tel-U case dashboard, original column import, duplicate protection, case editing and year filters')
                 page.reload()
@@ -704,7 +704,8 @@ def main():
                 expect(listing).not_to_contain_text('CASE-TEST-1')
                 expect(listing).not_to_contain_text('Kegiatan Grup Asrama')
                 print('PASS: grouped navigation, isolated datasets, PPK Tel-U save/reload, and unchanged legacy Pengkar data')
-                page.get_by_role('button',name='Log Out',exact=False).click()
+                page.get_by_label('Menu pengguna',exact=True).click()
+                page.get_by_role('button',name='Log Out',exact=True).click()
                 page.get_by_label('Username',exact=True).fill('operatoruji')
                 page.get_by_label('Password',exact=True).fill(operator_password)
                 page.get_by_role('button',name='Login',exact=True).click()
@@ -746,7 +747,8 @@ def main():
                     exported.value.save_as(pdf_path)
                     reader=PdfReader(str(pdf_path))
                     pdf_text=' '.join(p.extract_text() for p in reader.pages)
-                    assert 'Total Kegiatan' in pdf_text and 'Total Peserta' in pdf_text
+                    assert all(len(p.images)>0 for p in reader.pages)
+                    shutil.copyfile(pdf_path,ARTIFACTS/('dashboard-'+group+'.pdf'))
                     assert 'PKKM Sign In' not in pdf_text and 'Input Kegiatan Pengembangan Karakter (16 Field Master)' not in pdf_text
                     assert len(reader.pages)>0
 
@@ -754,7 +756,8 @@ def main():
                     expect(page.get_by_role('region',name='Survei kepuasan 20 pertanyaan',exact=True)).to_have_count(0)
                     expect(page.get_by_role('region',name='Rekap mahasiswa tersimpan',exact=True)).to_have_count(0)
                 print('PASS: monthly chart in all groups, duplicate names counted once per month, year/quarter filters and empty state')
-                page.get_by_role('button',name='Log Out',exact=False).click()
+                page.get_by_label('Menu pengguna',exact=True).click()
+                page.get_by_role('button',name='Log Out',exact=True).click()
                 page.get_by_label('Username',exact=True).fill('browseradminbaru')
                 page.get_by_label('Password',exact=True).fill(new_password)
                 page.get_by_role('button',name='Login',exact=True).click()

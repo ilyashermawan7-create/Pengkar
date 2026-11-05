@@ -496,22 +496,13 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
               </div>
             </div>
 
-            {/* Logout di Sisi Bawah Sidebar */}
-            <div className="p-4 border-t border-slate-100">
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-2 px-4 py-2.5 text-[#D71920] hover:bg-red-50 rounded-xl text-xs font-bold transition-all"
-              >
-                Log Out ➔
-              </button>
-            </div>
           </aside>
 
           {/* AREA KONTEN */}
           <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
 
             {/* TOP HEADER DENGAN PROFILE: ADMIN KKA */}
-            <header className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shadow-sm sticky top-0 z-30">
+            <header className="h-16 bg-white border-b border-slate-200 px-3 md:px-8 gap-2 flex items-center justify-between shadow-sm sticky top-0 z-30">
               <div className="flex items-center gap-4">
                 <button aria-label="Buka menu" onClick={()=>setSidebarOpen(!sidebarOpen)} className="text-slate-500 hover:text-slate-700 text-lg">☰</button>
                 <div className="text-xs text-slate-400 font-medium">
@@ -519,16 +510,16 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                 </div>
               </div>
 
-              {/* PROFILE ADMIN KKA */}
-              <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
-                <div className="w-9 h-9 rounded-full bg-[#1e293b] text-white flex items-center justify-center text-xs font-black shadow-sm">
-                  {profileData.nama.slice(0,2).toUpperCase()}
+              <details className="relative" onKeyDown={event=>{if(event.key==='Escape'){event.currentTarget.open=false;event.currentTarget.querySelector('summary').focus();}}} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))event.currentTarget.open=false;}}>
+                <summary aria-label="Menu pengguna" className="flex items-center gap-2 md:gap-3 pl-3 border-l border-slate-200 cursor-pointer list-none rounded-lg focus-visible:outline focus-visible:outline-red-700">
+                  <span className="w-9 h-9 rounded-full bg-[#1e293b] text-white flex items-center justify-center text-xs font-black shrink-0">{profileData.nama.slice(0,2).toUpperCase()}</span>
+                  <span className="text-left text-xs max-w-[100px] md:max-w-48"><span className="font-extrabold block text-slate-900 leading-tight truncate">{profileData.nama}</span><span className="text-[11px] text-slate-400">Telkom University</span></span>
+                  <span aria-hidden="true" className="text-slate-500">▾</span>
+                </summary>
+                <div className="absolute right-0 mt-3 w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                  <button type="button" onClick={handleLogout} className="w-full text-left rounded-lg px-4 py-3 text-sm font-bold text-red-700 hover:bg-red-50">Log Out</button>
                 </div>
-                <div className="text-left text-xs">
-                  <span className="font-extrabold block text-slate-900 leading-tight">{profileData.nama}</span>
-                  <span className="text-[11px] text-slate-400 font-medium">Telkom University</span>
-                </div>
-              </div>
+              </details>
             </header>
 
             {notice && <div role="status" className="mx-6 mt-4 p-3 bg-blue-50 border border-blue-200 text-blue-900 rounded-xl text-sm">{notice}</div>}
@@ -1299,14 +1290,6 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                     </div>
 
                     <div className="flex justify-between items-center pt-4 border-t">
-                      <button
-                        type="button"
-                        onClick={handleLogout}
-                        className="px-5 py-2.5 bg-red-50 hover:bg-red-100 text-[#D71920] font-bold rounded-xl text-xs transition-all"
-                      >
-                        Log Out dari Aplikasi
-                      </button>
-
                       <button
                         type="submit" disabled={busy}
                         className="px-6 py-2.5 bg-[#D71920] hover:bg-red-700 text-white font-bold rounded-xl text-xs shadow-md transition-all"
