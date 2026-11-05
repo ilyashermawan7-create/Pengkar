@@ -394,3 +394,6 @@ Log Out tersedia melalui dropdown Menu pengguna di header kanan atas; Escape men
 
 ### Pembatasan Operator Asrama dan Operator PPKPT
 allowedNavigationGroups membatasi pilihan Asrama ke overview/asrama dan PPKPT ke overview/ppk-telu. Overview Asrama hanya memakai data program Asrama; overview PPKPT menampilkan dashboard kasus. Laporan operator tersebut hanya menampilkan input dan rekap, tanpa panel migrasi, administrasi akun, survei terpisah, branding atau kategorisasi massal. API snapshot/search/stats dan endpoint aktivitas lama tidak memberikan data kegiatan Pengkar kepada kedua role; PPKPT tidak menerima aktivitas/peserta/survei umum. Pengelolaan kasus PPK Tel-U memakai API kasus terpisah.
+
+### Aksi Edit dan sidebar
+Sidebar dapat diciutkan di desktop, tetap terlihat saat halaman digulir, dan ditutup di ponsel lewat tombol ×, latar, atau Escape. aria-expanded mengikuti keadaan aktual dan pergantian breakpoint menutup panel seluler. Edit kegiatan/kasus mengarahkan scroll ke formulir dan memfokuskan kolom utama setelah React merender; tombol simpan membedakan tambah dan ubah. Batalkan edit memakai type=button sehingga tidak mengirim POST/PUT. Formulir baru/batal Asrama mengikuti grup aktif, termasuk bagi admin. Setelah simpan, filter rekap direset agar hasil tidak tersembunyi oleh filter lama. Viewer tetap hanya membaca.

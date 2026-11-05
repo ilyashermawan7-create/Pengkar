@@ -63,6 +63,13 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
       const [surveyRows, setSurveyRows] = useState([]);
       const [passwordForm, setPasswordForm] = useState({current_password:'',new_password:'',confirm:''});
       const [sidebarOpen, setSidebarOpen] = useState(false);
+      const [desktopSidebarCollapsed,setDesktopSidebarCollapsed]=useState(false);
+      const [isDesktop,setIsDesktop]=useState(()=>window.matchMedia('(min-width:768px)').matches);
+      const activityFormRef=useRef(null);
+      useEffect(()=>{const media=window.matchMedia('(min-width:768px)');const update=()=>{setIsDesktop(media.matches);setSidebarOpen(false);};media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
+      const toggleSidebar=()=>isDesktop?setDesktopSidebarCollapsed(value=>!value):setSidebarOpen(value=>!value);
+      useEffect(()=>{if(!sidebarOpen||isDesktop)return;const close=event=>{if(event.key==='Escape'){setSidebarOpen(false);document.querySelector('[aria-controls="main-sidebar"]')?.focus();}};document.addEventListener('keydown',close);return()=>document.removeEventListener('keydown',close);},[sidebarOpen,isDesktop]);
+      const focusActivityForm=()=>requestAnimationFrame(()=>{activityFormRef.current?.scrollIntoView({block:'start'});activityFormRef.current?.querySelector('#field-7')?.focus({preventScroll:true});});
       const [surveyActivityId, setSurveyActivityId] = useState('');
       const api = async (path, options={}, authToken=token) => {
         const {response,data} = await requestData('/api' + path, {...options, headers: {
@@ -127,7 +134,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         if (!token) return;
         load(token,false).then(()=>setIsLoggedIn(true)).catch(error=>setLoginError(error.message));
       }, []);
-      useEffect(()=>{if(!editingId)setActivityForm({...freshForm(),...(profileData.role==='asrama'?{program:'Asrama',kategori:'Adaptif',urusan:'Asrama'}:{})});},[profileData.role,activeGroup]);
+      useEffect(()=>{if(!editingId)setActivityForm({...freshForm(),...((profileData.role==='asrama'||activeGroup==='asrama')?{program:'Asrama',kategori:'Adaptif',urusan:'Asrama',navigationGroup:'asrama'}:{})});},[profileData.role,activeGroup]);
       useEffect(()=>{
         if(!isLoggedIn||fullDataLoaded||!searchNim.trim()){setMatchedActivityIds([]);return;}
         let active=true;
@@ -262,17 +269,17 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
           setEditingId(null);setParticipantRows([]);setSurveyRows([]);setImportedParticipantFile(null);setParticipantImportError('');setSurveyActivityId('');setNotice('');
         }
       };
-      const resetActivity = () => {setEditingId(null);setActivityForm({...freshForm(),...(profileData.role==='asrama'?{program:'Asrama',kategori:'Adaptif',urusan:'Asrama'}:{})});setParticipantRows([]);setSurveyRows([]);setImportedParticipantFile(null);setParticipantImportError('');};
+      const resetActivity = () => {setEditingId(null);setActivityForm({...freshForm(),...((profileData.role==='asrama'||activeGroup==='asrama')?{program:'Asrama',kategori:'Adaptif',urusan:'Asrama',navigationGroup:'asrama'}:{})});setParticipantRows([]);setSurveyRows([]);setImportedParticipantFile(null);setParticipantImportError('');};
       const editActivity = (act) => {
         setEditingId(act.id);setActivityForm({...freshForm(),...act,tanggal:act.tanggal||'',jumlahPeserta:act.jumlahPeserta??'',takPanitia:act.takPanitia??'',takPeserta:act.takPeserta??'',targetSurveyKepuasan:act.targetSurveyKepuasan??''});
         setParticipantRows(students.filter(s=>s.activityId===act.id&&s.nim));setSurveyRows(surveys.filter(s=>s.activityId===act.id));
-        setImportedParticipantFile(null);setParticipantImportError('');setActiveNav('laporan');window.scrollTo(0,0);
+        setImportedParticipantFile(null);setParticipantImportError('');setActiveNav('laporan');focusActivityForm();
       };
       const handleSaveActivity = async (e) => {
         e.preventDefault();await run(async()=>{
           const payload={...activityForm,tanggal:activityForm.tanggal||null,jumlahPeserta:activityForm.jumlahPeserta===''?null:Number(activityForm.jumlahPeserta),takPanitia:activityForm.takPanitia===''?null:Number(activityForm.takPanitia),takPeserta:activityForm.takPeserta===''?null:Number(activityForm.takPeserta),targetSurveyKepuasan:activityForm.targetSurveyKepuasan===''?null:Number(activityForm.targetSurveyKepuasan),participants:participantRows,surveys:surveyRows};
           await api('/dashboard/activities'+(editingId?'/'+editingId:''),{method:editingId?'PUT':'POST',body:JSON.stringify(payload)});
-          await load();resetActivity();setNotice('Kegiatan berhasil disimpan di server.');
+          await load();resetActivity();setSearchNim('');setFilterYear('Semua Tahun');setFilterTw('Semua Triwulan');setFilterCategory('Semua Kategori');setNotice('Kegiatan berhasil disimpan di server.');
         });
       };
       const deleteActivity = async (act) => {
@@ -470,11 +477,13 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
         <div className="telu-app min-h-screen flex bg-[#f8f9fa] text-slate-800">
 
 
+          {sidebarOpen&&!isDesktop&&<button type="button" aria-label="Tutup menu navigasi" className="fixed inset-0 z-[35] bg-slate-900/40 md:hidden" onClick={()=>setSidebarOpen(false)}/>}
           {/* SIDEBAR KIRI */}
-          <aside className={`${sidebarOpen ? "flex" : "hidden"} md:flex fixed inset-y-0 left-0 z-40 md:static w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 shadow-sm min-h-screen`}>
+          <aside id="main-sidebar" className={`${sidebarOpen ? "flex" : "hidden"} ${desktopSidebarCollapsed?"md:hidden":"md:flex"} fixed inset-y-0 left-0 z-40 md:sticky md:top-0 w-64 bg-white border-r border-slate-200 flex-col justify-between shrink-0 shadow-sm h-screen overflow-y-auto`}>
             <div>
               {/* Logo resmi Direktorat Kemahasiswaan, Karier dan Alumni */}
-              <div className="p-4 border-b border-slate-100">
+              <div className="relative p-4 border-b border-slate-100">
+                <button type="button" aria-label="Tutup menu" className="absolute top-1 right-1 md:hidden rounded-lg bg-white border px-2 py-1 text-slate-600" onClick={()=>setSidebarOpen(false)}>×</button>
                 <img src="/static/images/logo-kka.png" alt="Direktorat Kemahasiswaan, Karier dan Alumni Universitas Telkom" width="779" height="227" className="block w-full h-auto" />
               </div>
 
@@ -508,9 +517,9 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {/* TOP HEADER DENGAN PROFILE: ADMIN KKA */}
             <header className="h-16 bg-white border-b border-slate-200 px-3 md:px-8 gap-2 flex items-center justify-between shadow-sm sticky top-0 z-30">
               <div className="flex items-center gap-4">
-                <button aria-label="Buka menu" onClick={()=>setSidebarOpen(!sidebarOpen)} className="text-slate-500 hover:text-slate-700 text-lg">☰</button>
+                <button type="button" aria-label={isDesktop&&!desktopSidebarCollapsed?"Tutup menu":"Buka menu"} aria-controls="main-sidebar" aria-expanded={isDesktop?!desktopSidebarCollapsed:sidebarOpen} onClick={toggleSidebar} className="text-slate-500 hover:text-slate-700 text-lg">☰</button>
                 <div className="text-xs text-slate-400 font-medium">
-                  <span className="hover:text-slate-600 cursor-pointer">Dit. KKA</span> &gt; {['dashboard','laporan'].includes(activeNav)&&<><span>{groupLabel}</span> &gt; </>}<span className="text-slate-800 font-bold uppercase">{activeNav}</span>
+                  <button type="button" onClick={()=>navigateGroup('overview','dashboard')} className="hover:text-slate-600">Dit. KKA</button> &gt; {['dashboard','laporan'].includes(activeNav)&&<><span>{groupLabel}</span> &gt; </>}<span className="text-slate-800 font-bold uppercase">{activeNav}</span>
                 </div>
               </div>
 
@@ -773,7 +782,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                   {activeGroup==='asrama'&&isAdmin&&<AsramaCategoryReview api={api} reload={load} />}
 
                   {!canWrite && <p className="text-sm text-slate-500">Akun ini dapat membaca laporan. Input kegiatan tersedia untuk operator dan administrator.</p>}
-                  {canWrite && <form onSubmit={handleSaveActivity} className="space-y-6 text-xs">
+                  {canWrite && <form ref={activityFormRef} aria-label="Formulir kegiatan" onSubmit={handleSaveActivity} className="space-y-6 text-xs scroll-mt-24">
                     {editingId && <div className="p-3 bg-blue-50 text-blue-900 rounded-xl">Mengedit kegiatan #{editingId}. <button type="button" onClick={resetActivity}>Batalkan edit</button></div>}
                     <fieldset disabled={busy}>
                     <label className="font-bold block mb-1" htmlFor="field-6">Program / Hak Akses</label>
@@ -1088,7 +1097,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
                         type="submit" disabled={busy}
                         className="px-8 py-3 bg-[#D71920] hover:bg-red-700 text-white font-bold rounded-xl shadow-lg transition-all text-xs tracking-wide"
                       >
-                        Simpan & Publikasikan Kegiatan
+                        {editingId?'Simpan Perubahan Kegiatan':'Simpan & Publikasikan Kegiatan'}
                       </button>
                     </div>
                     </fieldset>
