@@ -370,3 +370,9 @@ agregat fakultas. Logo resmi dapat diunggah pada Laporan PPK Tel-U (PNG/JPG/
 WebP maksimal 500 KB) dan disimpan dalam ppkt_branding di disk SQLite Render;
 tidak dimasukkan ke repositori. Header menampilkan lambang pengganti sampai
 logo resmi diunggah, tanpa menganggap lambang tersebut sebagai logo asli.
+
+Header PPK Tel-U memakai judul Dashboard PPKPT tanpa kata Executive. Rujukan
+pada header: Permendikbudristek 55 Tahun 2024 dan PU Rektor
+PU. 004/KMH01/KKA/2026. Ikon perisai pengganti dihapus; jika berkas logo resmi
+belum diunggah, header menampilkan keterangan tersebut dan tidak menyamakan
+ikon umum dengan logo Satgas. Logo asli dibaca dari unggahan server.

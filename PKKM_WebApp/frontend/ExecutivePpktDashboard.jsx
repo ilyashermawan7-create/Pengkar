@@ -4,7 +4,8 @@ const colors=['#b21835','#3b82f6','#f59e0b','#8b5cf6','#ec4899','#64748b','#14b8
 const percent=(n,total)=>total?100*n/total:0;
 export function SatgasLogo({version='initial'}){
  const [failed,setFailed]=useState(false);useEffect(()=>setFailed(false),[version]);
- return <div className="shrink-0">{!failed?<img src={'/api/ppkt/logo?v='+version} onError={()=>setFailed(true)} alt="Logo Satgas PPKPT" className="h-20 w-auto max-w-56 object-contain"/>:<div className="flex items-center gap-2"><div className="bg-red-700 text-white rounded-2xl p-3 shadow-md" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 3 3.5 6v5.5c0 5 5.8 8.4 8.5 9.5 2.7-1.1 8.5-4.5 8.5-9.5V6L12 3Z" stroke="currentColor" strokeWidth="2.5"/><path d="M12 4v15" stroke="currentColor" strokeWidth="2"/></svg></div><span className="text-xs font-extrabold text-red-800 leading-tight">SATGAS<br/>PPKPT</span></div>}</div>;
+ if(failed)return <div className="shrink-0 border border-slate-200 bg-slate-50 rounded-xl p-3 text-xs text-slate-500 max-w-40">Logo Satgas PPKPT belum diunggah</div>;
+ return <div className="shrink-0"><img src={'/api/ppkt/logo?v='+version} onError={()=>setFailed(true)} alt="Logo Satgas PPKPT" className="h-20 w-auto max-w-56 object-contain"/></div>;
 }
 function ExecutiveChart({title,subtitle,badge,labels,datasets,doughnut=false,kind='bar'}){
  const canvas=useRef(null),signature=JSON.stringify({labels,datasets});

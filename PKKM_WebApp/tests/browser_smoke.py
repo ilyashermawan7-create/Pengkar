@@ -657,7 +657,7 @@ def main():
                 expect(page.get_by_text('Total Laporan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('1')
                 page.get_by_role('button',name='Reset Filter Kasus',exact=True).click()
                 expect(page.get_by_text('Total Laporan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('2')
-                expect(page.get_by_role('heading',name='Executive Dashboard PPKPT',exact=True)).to_be_visible()
+                expect(page.get_by_role('heading',name='Dashboard PPKPT',exact=True)).to_be_visible()
                 distribution=page.get_by_role('region',name='Sebaran prodi kasus PPKPT',exact=True)
                 expect(distribution.locator('tbody tr')).to_have_count(2)
                 expect(distribution).not_to_contain_text('CASE-TEST-1')
