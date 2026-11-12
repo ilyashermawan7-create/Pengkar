@@ -21,7 +21,7 @@ class DashboardTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(server.app)
         with server.connect() as c:
-            for table in ('ppkt_branding','ppkt_cases','pending_participants','activity_unidentified_participants','pending_surveys','student_directory','survey_responses','activity_participants','activity_details','students',
+            for table in ('integration_keys','ppkt_branding','ppkt_cases','pending_participants','activity_unidentified_participants','pending_surveys','student_directory','survey_responses','activity_participants','activity_details','students',
                           'evaluations','activities','audit','sessions','users'):
                 c.execute(f'DELETE FROM {table}')
             c.execute('INSERT INTO users(username,password_hash,full_name,role) VALUES(?,?,?,?)',
@@ -71,6 +71,54 @@ class DashboardTests(unittest.TestCase):
             'role':role,'password':'Test-password-only-2026'})
         self.assertEqual(response.status_code,201,response.text)
         return response.json()['id'], self.login(username)
+
+    def test_integration_key_reads_business_data_but_cannot_mutate_or_read_credentials(self):
+        pengkar=self.create(self.activity(namaKegiatan='Integration Pengkar'))
+        dorm=self.create(self.activity(namaKegiatan='Integration Asrama',program='Asrama'))
+        self.client.post('/api/ppkt/cases',headers=self.headers,json={'caseNumber':'INTEGRATION-CASE','notes':'Synthetic case detail'})
+        response=self.client.post('/api/integration/keys',headers=self.headers,json={'name':'Synthetic recipient','days':30})
+        self.assertEqual(response.status_code,201,response.text)
+        self.assertEqual(response.headers['cache-control'],'no-store')
+        token=response.json()['token'];ident=response.json()['id'];headers={'Authorization':'Bearer '+token}
+        with server.connect() as c:
+            stored=c.execute('SELECT token_hash FROM integration_keys WHERE id=?',(ident,)).fetchone()[0]
+            self.assertNotEqual(stored,token);self.assertNotIn(token,stored)
+        listing=self.client.get('/api/integration/keys',headers=self.headers)
+        self.assertNotIn(token,listing.text);self.assertNotIn('token_hash',listing.text)
+        result=self.client.get('/api/integration/data',headers=headers)
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(result.headers['cache-control'],'no-store')
+        data=result.json();self.assertEqual({row['id'] for row in data['activities']},{pengkar,dorm})
+        self.assertTrue(data['students']);self.assertTrue(data['surveys'])
+        self.assertEqual(data['cases'][0]['notes'],'Synthetic case detail')
+        self.assertEqual(data['caseSummary']['total'],1)
+        self.assertNotIn('adminList',data);self.assertNotIn('profile',data)
+        for path in ('/api/me','/api/dashboard','/api/users','/api/integration/keys'):
+            self.assertEqual(self.client.get(path,headers=headers).status_code,401)
+        self.assertEqual(self.client.post('/api/dashboard/activities',headers=headers,json=self.activity()).status_code,401)
+        self.assertEqual(self.client.delete('/api/activities/'+str(pengkar),headers=headers).status_code,401)
+        self.assertEqual(self.client.put('/api/ppkt/cases/1',headers=headers,json={'caseNumber':'DENIED'}).status_code,401)
+        self.assertEqual(self.client.post('/api/integration/data',headers=headers).status_code,405)
+        self.assertEqual(self.client.delete('/api/integration/keys/'+str(ident),headers=self.headers).status_code,200)
+        self.assertEqual(self.client.get('/api/integration/data',headers=headers).status_code,401)
+
+    def test_integration_keys_require_superadmin_and_expire_with_owner_access(self):
+        for role in ('operator','pengkar','asrama','ppkpt','viewer'):
+            _,headers=self.new_user('integration-'+role,role)
+            self.assertEqual(self.client.post('/api/integration/keys',headers=headers,json={'name':'Denied','days':30}).status_code,403)
+            self.assertEqual(self.client.get('/api/integration/keys',headers=headers).status_code,403)
+            self.assertEqual(self.client.delete('/api/integration/keys/1',headers=headers).status_code,403)
+        self.assertEqual(self.client.get('/api/integration/data').status_code,401)
+        self.assertEqual(self.client.get('/api/integration/data',headers=self.headers).status_code,401)
+        self.assertEqual(self.client.post('/api/integration/keys',headers=self.headers,json={'name':'Invalid','days':91}).status_code,422)
+        result=self.client.post('/api/integration/keys',headers=self.headers,json={'name':'Expiry check','days':1}).json()
+        headers={'Authorization':'Bearer '+result['token']}
+        with server.connect() as c:c.execute("UPDATE integration_keys SET expires_at='2000-01-01T00:00:00+00:00' WHERE id=?",(result['id'],))
+        self.assertEqual(self.client.get('/api/integration/data',headers=headers).status_code,401)
+        result=self.client.post('/api/integration/keys',headers=self.headers,json={'name':'Owner check','days':1}).json()
+        headers={'Authorization':'Bearer '+result['token']}
+        with server.connect() as c:c.execute("UPDATE users SET active=0 WHERE username='testadmin'")
+        self.assertEqual(self.client.get('/api/integration/data',headers=headers).status_code,401)
 
     def test_login_required_and_no_demo_data(self):
         homepage=self.client.get('/')

@@ -9,6 +9,7 @@ import MonthlyActivityTrend from './MonthlyActivityTrend.jsx';
 import AsramaCategoryReview from './AsramaCategoryReview.jsx';
 import PpktDashboard from './PpktDashboard.jsx';
 import TeluBanner from './TeluBanner.jsx';
+import IntegrationKeys from './IntegrationKeys.jsx';
 import DashboardPdfButton from './DashboardPdfButton.jsx';
 import {asramaCategories,asramaCategory} from './asramaCategories.mjs';
 import {downloadReportPdf} from './reportPdf.mjs';
@@ -1154,6 +1155,7 @@ import {readSurveyResponses,normalizeName,downloadSatisfactionTemplate} from './
             {/* ========================================================================= */}
             {/* 3. MENU: PENGATURAN ADMIN (BUATKAN & HAPUS AKUN)                           */}
             {/* ========================================================================= */}
+            {activeNav==='pengaturanAdmin'&&isAdmin&&<div className="p-6"><IntegrationKeys api={api}/></div>}
             {activeNav === 'pengaturanAdmin' && canManageAccounts && (
               <main className="p-6 md:p-8 space-y-6 max-w-5xl mx-auto w-full">
                 <div>

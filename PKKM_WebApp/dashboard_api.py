@@ -846,3 +846,6 @@ def register(app, connect, auth, allow, audit, hash_password, check_password):
             c.execute('DELETE FROM sessions WHERE user_id=?', (user['id'],))
             audit(c,user,'change_password','user',user['id'])
         return {'ok':True}
+
+    from integration_api import register as register_integration
+    register_integration(app,connect,auth,audit,build_snapshot,stream_snapshot)
