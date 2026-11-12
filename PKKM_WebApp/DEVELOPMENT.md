@@ -397,3 +397,8 @@ allowedNavigationGroups membatasi pilihan Asrama ke overview/asrama dan PPKPT ke
 
 ### Aksi Edit dan sidebar
 Sidebar dapat diciutkan di desktop, tetap terlihat saat halaman digulir, dan ditutup di ponsel lewat tombol ×, latar, atau Escape. aria-expanded mengikuti keadaan aktual dan pergantian breakpoint menutup panel seluler. Edit kegiatan/kasus mengarahkan scroll ke formulir dan memfokuskan kolom utama setelah React merender; tombol simpan membedakan tambah dan ubah. Batalkan edit memakai type=button sehingga tidak mengirim POST/PUT. Formulir baru/batal Asrama mengikuti grup aktif, termasuk bagi admin. Setelah simpan, filter rekap direset agar hasil tidak tersembunyi oleh filter lama. Viewer tetap hanya membaca.
+
+### Tren kasus bulanan PPK Tel-U
+Grafik utama memakai tanggal laporan masuk (YYYY-MM), dengan seri Total Kasus dan Kekerasan Seksual. Filter tahun/fakultas/kategori/status diterapkan di API sebelum agregasi. Tiap tahun ditampilkan Januari–Desember, termasuk bulan nol; label menyertakan tahun agar periode tidak tercampur. Kasus tanpa tanggal tetap masuk total dan disertai keterangan, tetapi tidak ditebak bulannya. sexualYears dipertahankan untuk kompatibilitas API; sexualMonths menambah agregat bulanan.
+
+Pembaca CSV kasus memakai raw=true agar tanggal teks DD/MM/YYYY tidak dikonversi otomatis menjadi serial tanggal MM/DD/YYYY oleh SheetJS. File XLSX dengan serial tanggal tetap memakai parse_date_code. Perbaikan ini berlaku pada pembacaan berkas berikutnya; tanggal historis tidak ditukar otomatis.

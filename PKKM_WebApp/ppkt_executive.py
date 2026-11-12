@@ -16,11 +16,13 @@ def recommendation(item):
     return bool(re.search(r'rekomendasi.*sanksi|menentukan sanksi|penentuan sanksi|penetapan sanksi',status))
 
 def executive_stats(records,bucket):
-    result={'recommendations':0,'activeInvestigation':0,'reportedFaculties':{},'sexualYears':{}}
+    result={'recommendations':0,'activeInvestigation':0,'reportedFaculties':{},'sexualYears':{},'sexualMonths':{}}
     for item in records:
         faculty=faculty_label(item)
         result['reportedFaculties'][faculty]=result['reportedFaculties'].get(faculty,0)+1
         if 'seksual' in item.category.casefold():
+            if item.reportDate:
+                month=item.reportDate.strftime('%Y-%m');result['sexualMonths'][month]=result['sexualMonths'].get(month,0)+1
             year=str(item.year) if item.year else 'Belum diisi';result['sexualYears'][year]=result['sexualYears'].get(year,0)+1
         if bucket(item.status)=='Dalam proses':
             if recommendation(item):result['recommendations']+=1

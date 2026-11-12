@@ -12,3 +12,9 @@ test('missing case numbers and conflicting report years are rejected without par
  await assert.rejects(readCaseFile(file([{'Tahun':2024,'Nomor Kasus':''}])),/Nomor Kasus wajib/);
  await assert.rejects(readCaseFile(file([{'Tahun':2024,'Nomor Kasus':'TEST','Tanggal Laporan Masuk':'01/01/2025'}])),/Tahun berbeda/);
 });
+
+test('CSV preserves DD/MM/YYYY instead of guessing US month/day before monthly aggregation',async()=>{
+ const bytes=Buffer.from('Tahun,Tanggal Laporan Masuk,Nomor Kasus\n2024,05/11/2024,CSV-NOV\n2024,11/05/2024,CSV-MAY\n');
+ const rows=await readCaseFile({size:bytes.length,arrayBuffer:async()=>bytes});
+ assert.equal(rows[0].reportDate,'2024-11-05');assert.equal(rows[1].reportDate,'2024-05-11');
+});

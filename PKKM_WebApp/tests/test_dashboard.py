@@ -171,6 +171,20 @@ class DashboardTests(unittest.TestCase):
         _,viewer=self.new_user('distributionviewer','viewer')
         self.assertEqual(self.client.get('/api/ppkt/distribution',headers=viewer).status_code,403)
 
+    def test_ppkt_monthly_trend_uses_report_dates_and_preserves_filters(self):
+        items=[{'caseNumber':'MONTH-1','reportDate':'2024-01-03','category':'Kekerasan Seksual','reportedFaculty':'FEB'},
+               {'caseNumber':'MONTH-2','reportDate':'2024-02-10','category':'Psikis','reportedFaculty':'FIF'},
+               {'caseNumber':'MONTH-3','reportDate':'2025-01-09','category':'Kekerasan Seksual','reportedFaculty':'FIF'},
+               {'caseNumber':'MONTH-4','year':2024,'category':'Kekerasan Seksual','reportedFaculty':'FEB'}]
+        self.assertEqual(self.client.post('/api/ppkt/import',headers=self.headers,json={'items':items}).status_code,200)
+        data=self.client.get('/api/ppkt/summary',headers=self.headers).json()
+        self.assertEqual(data['months'],{'2024-01':1,'2024-02':1,'2025-01':1})
+        self.assertEqual(data['sexualMonths'],{'2024-01':1,'2025-01':1})
+        self.assertEqual(data['total'],4);self.assertEqual(data['missingDate'],1)
+        data=self.client.get('/api/ppkt/summary?year=2024&faculty=FEB',headers=self.headers).json()
+        self.assertEqual(data['months'],{'2024-01':1});self.assertEqual(data['sexualMonths'],{'2024-01':1})
+        self.assertEqual(data['total'],2);self.assertEqual(data['missingDate'],1)
+
     def test_official_ppkt_logo_is_installed_once_without_resetting_later_uploads(self):
         from ppkt_api import initialize as initialize_ppkt,DEFAULT_LOGO
         with tempfile.TemporaryDirectory(prefix='ppkt-logo-') as directory:

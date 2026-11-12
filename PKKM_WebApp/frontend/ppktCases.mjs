@@ -19,7 +19,7 @@ function bool(value,row,label){
 }
 export async function readCaseFile(file){
  if(file.size>10*1024*1024)throw Error('Ukuran berkas maksimal 10 MB.');
- const b=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:false,sheetRows:10032});
+ const b=XLSX.read(await file.arrayBuffer(),{type:'array',raw:true,cellDates:false,sheetRows:10032});
  for(const name of b.SheetNames){
   const rows=XLSX.utils.sheet_to_json(b.Sheets[name],{header:1,defval:'',blankrows:false});
   const start=rows.findIndex((row,index)=>index<30&&row.map(normalize).includes('nomorkasus'));
