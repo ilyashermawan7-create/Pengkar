@@ -1,0 +1,11 @@
+{
+  "stages": ["Pelaporan", "Tindak Lanjut Pelaporan", "Pemeriksaan", "Penyusunan Kesimpulan, Rekomendasi, dan Putusan", "Tindak Lanjut Putusan"],
+  "review": "Perlu Ditinjau",
+  "aliases": {
+    "laporan diterima": "Pelaporan",
+    "tindak lanjut laporan": "Tindak Lanjut Pelaporan",
+    "dengar keterangan": "Pemeriksaan",
+    "pemeriksaan saksi": "Pemeriksaan",
+    "kesimpulan dan rekomendasi sanksi": "Penyusunan Kesimpulan, Rekomendasi, dan Putusan"
+  }
+}

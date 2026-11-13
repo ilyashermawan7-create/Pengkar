@@ -219,6 +219,27 @@ class DashboardTests(unittest.TestCase):
         _,viewer=self.new_user('distributionviewer','viewer')
         self.assertEqual(self.client.get('/api/ppkt/distribution',headers=viewer).status_code,403)
 
+    def test_ppkt_five_stages_preserve_legacy_and_filter_consistently(self):
+        from case_stages import STAGES,REVIEW
+        items=[{'caseNumber':'STAGE-'+str(i),'status':label,'year':2026} for i,label in enumerate(STAGES)]
+        items += [{'caseNumber':'OLD-CLEAR','status':'Dengar Keterangan','year':2026},
+                  {'caseNumber':'OLD-CLOSED','status':'Tutup Kasus','year':2026},
+                  {'caseNumber':'OLD-UNSURE','status':'On Progress','year':2026},
+                  {'caseNumber':'EMPTY','year':2026}]
+        self.assertEqual(self.client.post('/api/ppkt/import',headers=self.headers,json={'items':items}).status_code,200)
+        data=self.client.get('/api/ppkt/summary',headers=self.headers).json()
+        self.assertEqual(data['stages'],{label:2 if label=='Pemeriksaan' else 1 for label in STAGES})
+        self.assertEqual(data['stageReview'],3)
+        self.assertEqual(sum(data['stages'].values())+data['stageReview'],data['total'])
+        for label in STAGES+[REVIEW]:
+            expected=3 if label==REVIEW else data['stages'][label]
+            self.assertEqual(self.client.get('/api/ppkt/summary',params={'status':label},headers=self.headers).json()['total'],expected)
+            self.assertEqual(len(self.client.get('/api/ppkt/cases',params={'status':label},headers=self.headers).json()['items']),expected)
+            self.assertEqual(self.client.get('/api/ppkt/distribution',params={'status':label},headers=self.headers).json()['total'],expected)
+        source=self.client.get('/api/ppkt/cases',headers=self.headers).json()['items']
+        self.assertEqual(next(item for item in source if item['caseNumber']=='OLD-CLEAR')['status'],'Dengar Keterangan')
+        self.assertEqual(data['closed'],1) # Follow-up of a decision does not imply closure.
+
     def test_ppkt_monthly_trend_uses_report_dates_and_preserves_filters(self):
         items=[{'caseNumber':'MONTH-1','reportDate':'2024-01-03','category':'Kekerasan Seksual','reportedFaculty':'FEB'},
                {'caseNumber':'MONTH-2','reportDate':'2024-02-10','category':'Psikis','reportedFaculty':'FIF'},

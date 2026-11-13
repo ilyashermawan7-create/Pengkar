@@ -7,6 +7,7 @@ import hashlib
 from pathlib import Path
 from fastapi.responses import Response
 from ppkt_executive import faculty_label,executive_stats
+from case_stages import STAGES,REVIEW,handling_stage,stage_counts
 from fastapi import Depends,HTTPException,Header
 from pydantic import BaseModel,Field,ConfigDict,model_validator
 
@@ -79,6 +80,7 @@ def summary(records):
         for field in keys:
             values=[getattr(item,field) for item in records]
             result[target][field]={'yes':sum(value is True for value in values),'no':sum(value is False for value in values),'unknown':sum(value is None for value in values)}
+    result.update(stage_counts(records))
     result.update(executive_stats(records,bucket))
     return result
 
@@ -93,7 +95,9 @@ def register(app,connect,auth,audit):
             item=CaseRecord.model_validate_json(row['payload'])
             if year is not None and item.year!=year:continue
             if category and (item.category or 'Belum diisi')!=category:continue
-            if status and bucket(item.status)!=status:continue
+            if status:
+                actual=(handling_stage(item.status) or REVIEW) if status in STAGES+[REVIEW] else bucket(item.status)
+                if actual!=status:continue
             if faculty and faculty_label(item)!=faculty:continue
             rows.append((row['id'],item))
         return rows
@@ -115,7 +119,7 @@ def register(app,connect,auth,audit):
         if page<1 or size not in (10,50,10000) or len(search)>200:raise HTTPException(422,'Parameter halaman tidak valid')
         with connect() as c:rows=selected(c,year,category,status,faculty)
         query=search.strip().casefold()
-        items=[{'displayId':f"CASE-{item.year or 'NA'}-{ident:04d}",'year':item.year,'faculty':faculty_label(item),'studyProgram':item.reportedStudyProgram or 'Belum diisi','category':item.category or 'Belum diisi','status':item.status or 'Belum diisi','statusGroup':bucket(item.status),'counseling':item.reporterCounseling} for ident,item in rows if not query or query in faculty_label(item).casefold() or query in item.reportedStudyProgram.casefold()]
+        items=[{'displayId':f"CASE-{item.year or 'NA'}-{ident:04d}",'year':item.year,'faculty':faculty_label(item),'studyProgram':item.reportedStudyProgram or 'Belum diisi','category':item.category or 'Belum diisi','status':item.status or 'Belum diisi','statusGroup':bucket(item.status),'handlingStage':handling_stage(item.status) or REVIEW,'counseling':item.reporterCounseling} for ident,item in rows if not query or query in faculty_label(item).casefold() or query in item.reportedStudyProgram.casefold()]
         return {'total':len(items),'items':items[(page-1)*size:page*size]}
 
     @app.get('/api/ppkt/logo')
