@@ -682,7 +682,7 @@ def main():
                 page.get_by_role('button',name='Dashboard',exact=False).first.click()
                 expect(page.get_by_text('Total Laporan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('2')
                 expect(page.get_by_role('heading',name='Pemeriksaan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('1')
-                expect(page.get_by_text('1 status lama/kosong perlu ditinjau.',exact=False)).to_be_visible()
+                expect(page.get_by_text('0 status lama/kosong perlu ditinjau.',exact=False)).to_be_visible()
                 for label in ('Pelaporan','Tindak Lanjut Pelaporan','Pemeriksaan','Penyusunan Kesimpulan, Rekomendasi, dan Putusan','Tindak Lanjut Putusan'):
                     expect(page.get_by_role('heading',name=label,exact=True)).to_be_visible()
                 expect(page.get_by_text('1 kasus belum memiliki tanggal laporan masuk',exact=False)).to_be_visible()

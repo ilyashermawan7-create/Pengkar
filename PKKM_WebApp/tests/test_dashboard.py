@@ -228,17 +228,50 @@ class DashboardTests(unittest.TestCase):
                   {'caseNumber':'EMPTY','year':2026}]
         self.assertEqual(self.client.post('/api/ppkt/import',headers=self.headers,json={'items':items}).status_code,200)
         data=self.client.get('/api/ppkt/summary',headers=self.headers).json()
-        self.assertEqual(data['stages'],{label:2 if label=='Pemeriksaan' else 1 for label in STAGES})
-        self.assertEqual(data['stageReview'],3)
+        self.assertEqual(data['stages'],{label:3 if label=='Pemeriksaan' else 2 if label=='Tindak Lanjut Putusan' else 1 for label in STAGES})
+        self.assertEqual(data['stageReview'],1)
         self.assertEqual(sum(data['stages'].values())+data['stageReview'],data['total'])
         for label in STAGES+[REVIEW]:
-            expected=3 if label==REVIEW else data['stages'][label]
+            expected=1 if label==REVIEW else data['stages'][label]
             self.assertEqual(self.client.get('/api/ppkt/summary',params={'status':label},headers=self.headers).json()['total'],expected)
             self.assertEqual(len(self.client.get('/api/ppkt/cases',params={'status':label},headers=self.headers).json()['items']),expected)
             self.assertEqual(self.client.get('/api/ppkt/distribution',params={'status':label},headers=self.headers).json()['total'],expected)
         source=self.client.get('/api/ppkt/cases',headers=self.headers).json()['items']
-        self.assertEqual(next(item for item in source if item['caseNumber']=='OLD-CLEAR')['status'],'Dengar Keterangan')
-        self.assertEqual(data['closed'],1) # Follow-up of a decision does not imply closure.
+        self.assertEqual(next(item for item in source if item['caseNumber']=='OLD-CLEAR')['status'],'Pemeriksaan')
+        self.assertEqual(data['closed'],0) # Follow-up of a decision does not imply closure.
+
+    def test_requested_status_mapping_migrates_once_and_preserves_position_history(self):
+        from ppkt_api import initialize as initialize_ppkt
+        from case_stages import SCHEMA
+        import json
+        with server.connect() as c:
+            for i,(source,mapping) in enumerate(SCHEMA['migrations'].items()):
+                payload={'caseNumber':'RAW-'+str(i),'status':source,'positionNotes':'Catatan asal','notes':'Narasi asli','category':'Psikis'}
+                c.execute('INSERT INTO ppkt_cases(case_key,payload) VALUES(?,?)',('raw-'+str(i),json.dumps(payload)))
+            c.execute('INSERT INTO ppkt_cases(case_key,payload) VALUES(?,?)',('unknown',json.dumps({'caseNumber':'UNKNOWN','status':'Belum jelas','positionNotes':'Jangan diubah'})))
+        initialize_ppkt(server.connect)
+        cases=self.client.get('/api/ppkt/cases',headers=self.headers).json()['items']
+        for i,(source,mapping) in enumerate(SCHEMA['migrations'].items()):
+            item=next(item for item in cases if item['caseNumber']=='RAW-'+str(i))
+            self.assertEqual(item['status'],mapping['status'])
+            self.assertEqual(item['notes'],'Narasi asli');self.assertEqual(item['category'],'Psikis')
+            self.assertIn('Catatan asal',item['positionNotes'])
+            if mapping.get('position'):self.assertIn(mapping['position'],item['positionNotes'])
+        self.assertEqual(next(item for item in cases if item['caseNumber']=='UNKNOWN')['status'],'Belum jelas')
+        with server.connect() as c:
+            first=c.execute('SELECT count(*) FROM ppkt_status_mapping_history').fetchone()[0]
+            before=json.loads(c.execute('SELECT before_payload FROM ppkt_status_mapping_history ORDER BY id LIMIT 1').fetchone()[0])
+            self.assertEqual(before['status'],next(iter(SCHEMA['migrations'])))
+        initialize_ppkt(server.connect)
+        with server.connect() as c:self.assertEqual(c.execute('SELECT count(*) FROM ppkt_status_mapping_history').fetchone()[0],first)
+        item=self.client.post('/api/ppkt/cases',headers=self.headers,json={'caseNumber':'NEW-WITHDRAW','status':'Tarik Kasus','positionNotes':'Tarik kasus'}).json()
+        cases=self.client.get('/api/ppkt/cases',headers=self.headers).json()['items']
+        self.assertEqual(next(row for row in cases if row['id']==item['id'])['positionNotes'],'Tarik kasus')
+        result=self.client.post('/api/ppkt/cases',headers=self.headers,json={'caseNumber':'LONG-NOTES','status':'Sudah bertemu dengan korban','positionNotes':'x'*10000})
+        self.assertEqual(result.status_code,201,result.text)
+        cases=self.client.get('/api/ppkt/cases',headers=self.headers).json()['items']
+        self.assertEqual(next(row for row in cases if row['id']==result.json()['id'])['positionNotes'],'x'*10000+'\nmediasi')
+
 
     def test_ppkt_monthly_trend_uses_report_dates_and_preserves_filters(self):
         items=[{'caseNumber':'MONTH-1','reportDate':'2024-01-03','category':'Kekerasan Seksual','reportedFaculty':'FEB'},
@@ -295,11 +328,11 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(response.json()['created'],4)
         self.assertEqual(self.client.post('/api/ppkt/import',headers=self.headers,json={'items':items}).json()['skipped'],4)
         data=self.client.get('/api/ppkt/summary',headers=self.headers).json()
-        self.assertEqual([data[key] for key in ('total','closed','withdrawn','ongoing','unknownStatus','missingDate')],[4,1,1,1,1,3])
+        self.assertEqual([data[key] for key in ('total','closed','withdrawn','ongoing','unknownStatus','missingDate')],[4,0,0,3,1,3])
         self.assertEqual(data['workflow']['bap'],{'yes':1,'no':1,'unknown':2})
         self.assertNotIn('TEST-1',str(data))
         self.assertEqual(self.client.get('/api/ppkt/summary?year=2024',headers=self.headers).json()['total'],1)
-        self.assertEqual(self.client.get('/api/ppkt/summary?status=Dalam+proses',headers=self.headers).json()['total'],1)
+        self.assertEqual(self.client.get('/api/ppkt/summary?status=Dalam+proses',headers=self.headers).json()['total'],3)
         self.assertEqual(self.snapshot()['activities'],[])
 
     def test_ppkt_permissions_separate_summary_from_sensitive_case_data(self):
@@ -345,7 +378,7 @@ class DashboardTests(unittest.TestCase):
         _,headers=self.new_user('scoped-dorm-cases','asrama')
         self.assertEqual(self.client.get('/api/ppkt/cases',headers=headers).status_code,403)
 
-    def test_ppkt_case_edit_and_validation_preserve_exact_source_status(self):
+    def test_ppkt_case_edit_and_validation_preserve_notes_with_requested_mapping(self):
         result=self.client.post('/api/ppkt/cases',headers=self.headers,json={'caseNumber':'CASE-1','year':2024,'status':'Dengar Keterangan','notes':'Catatan asli'})
         self.assertEqual(result.status_code,201,result.text)
         ident=result.json()['id']
@@ -353,7 +386,7 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(self.client.put('/api/ppkt/cases/'+str(ident),headers=self.headers,json={'caseNumber':'CASE-1','year':2024,'status':'Tutup Kasus','notes':'Catatan tetap tersimpan'}).status_code,200)
         data=self.client.get('/api/ppkt/cases',headers=self.headers).json()['items'][0]
         self.assertEqual(data['notes'],'Catatan tetap tersimpan')
-        self.assertEqual(self.client.get('/api/ppkt/summary',headers=self.headers).json()['closed'],1)
+        self.assertEqual(self.client.get('/api/ppkt/summary',headers=self.headers).json()['stages']['Tindak Lanjut Putusan'],1)
         self.assertEqual(self.client.post('/api/ppkt/import',headers=self.headers,json={'items':[{'caseNumber':'X','year':2024,'reportDate':'2025-01-01'}]}).status_code,422)
 
     def test_startup_categorizes_only_clear_dorm_records_once_with_history(self):

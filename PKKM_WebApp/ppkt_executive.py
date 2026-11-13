@@ -1,5 +1,6 @@
 """Presentation aggregates; preserve original records and avoid inferred case outcomes."""
 import re
+from case_stages import handling_stage,STAGES
 
 def faculty_label(item):
     raw=' '.join(item.reportedFaculty.split())
@@ -24,7 +25,7 @@ def executive_stats(records,bucket):
             if item.reportDate:
                 month=item.reportDate.strftime('%Y-%m');result['sexualMonths'][month]=result['sexualMonths'].get(month,0)+1
             year=str(item.year) if item.year else 'Belum diisi';result['sexualYears'][year]=result['sexualYears'].get(year,0)+1
-        if bucket(item.status)=='Dalam proses':
-            if recommendation(item):result['recommendations']+=1
-            else:result['activeInvestigation']+=1
+        stage=handling_stage(item.status)
+        if stage==STAGES[3]:result['recommendations']+=1
+        elif stage==STAGES[2]:result['activeInvestigation']+=1
     return result

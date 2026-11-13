@@ -7,7 +7,7 @@ import hashlib
 from pathlib import Path
 from fastapi.responses import Response
 from ppkt_executive import faculty_label,executive_stats
-from case_stages import STAGES,REVIEW,handling_stage,stage_counts
+from case_stages import STAGES,REVIEW,handling_stage,stage_counts,apply_case_mapping,initialize_status_mapping
 from fastapi import Depends,HTTPException,Header
 from pydantic import BaseModel,Field,ConfigDict,model_validator
 
@@ -26,7 +26,7 @@ class CaseRecord(BaseModel):
     directorateAction:bool|None=None
     reporterCounseling:bool|None=None
     status:str=Field(default='',max_length=1000)
-    positionNotes:str=Field(default='',max_length=10000)
+    positionNotes:str=Field(default='',max_length=20000)
     reportedInstitution:str=Field(default='',max_length=500)
     reportedStudyProgram:str=Field(default='',max_length=500)
     reportedFaculty:str=Field(default='',max_length=500)
@@ -34,6 +34,8 @@ class CaseRecord(BaseModel):
     notes:str=Field(default='',max_length=20000)
     @model_validator(mode='after')
     def check_year(self):
+        if self.status not in STAGES and len(self.positionNotes)>10000:
+            raise ValueError('Keterangan posisi status lama maksimal 10.000 karakter sebelum penambahan penanda migrasi')
         if self.reportDate and self.year is None:self.year=self.reportDate.year
         if self.reportDate and self.year!=self.reportDate.year:raise ValueError('Tahun tidak sesuai tanggal laporan masuk')
         return self
@@ -47,6 +49,7 @@ DEFAULT_LOGO=Path(__file__).parent/'static/images/logo-satgas-ppkpt.png'
 def initialize(connect):
     with connect() as c:
         c.execute('CREATE TABLE IF NOT EXISTS ppkt_cases(id INTEGER PRIMARY KEY,case_key TEXT UNIQUE NOT NULL,payload TEXT NOT NULL,created_by INTEGER,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)')
+        initialize_status_mapping(c)
         c.execute('CREATE TABLE IF NOT EXISTS ppkt_branding(id INTEGER PRIMARY KEY CHECK(id=1),mime TEXT NOT NULL,image BLOB NOT NULL)')
         c.execute('CREATE TABLE IF NOT EXISTS ppkt_branding_defaults(digest TEXT PRIMARY KEY,applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)')
         if DEFAULT_LOGO.exists():
@@ -155,6 +158,7 @@ def register(app,connect,auth,audit):
         try:
             with connect() as c:
                 cur=c.execute('INSERT INTO ppkt_cases(case_key,payload,created_by) VALUES(?,?,?)',(number_key(data.caseNumber),json.dumps(data.model_dump(mode='json')),user['id']))
+                apply_case_mapping(c,cur.lastrowid)
                 audit(c,user,'create_ppkt_case','ppkt',cur.lastrowid)
                 return {'id':cur.lastrowid}
         except sqlite3.IntegrityError:raise HTTPException(409,'Nomor kasus sudah terdaftar')
@@ -166,6 +170,7 @@ def register(app,connect,auth,audit):
             with connect() as c:
                 if not c.execute('SELECT 1 FROM ppkt_cases WHERE id=?',(ident,)).fetchone():raise HTTPException(404,'Kasus tidak ditemukan')
                 c.execute('UPDATE ppkt_cases SET case_key=?,payload=? WHERE id=?',(number_key(data.caseNumber),json.dumps(data.model_dump(mode='json')),ident))
+                apply_case_mapping(c,ident)
                 audit(c,user,'update_ppkt_case','ppkt',ident)
         except sqlite3.IntegrityError:raise HTTPException(409,'Nomor kasus sudah terdaftar')
         return {'ok':True}
@@ -183,7 +188,8 @@ def register(app,connect,auth,audit):
             created=skipped=0
             for key,item in unique.items():
                 if c.execute('SELECT 1 FROM ppkt_cases WHERE case_key=?',(key,)).fetchone():skipped+=1;continue
-                c.execute('INSERT INTO ppkt_cases(case_key,payload,created_by) VALUES(?,?,?)',(key,json.dumps(item.model_dump(mode='json')),user['id']))
+                cur=c.execute('INSERT INTO ppkt_cases(case_key,payload,created_by) VALUES(?,?,?)',(key,json.dumps(item.model_dump(mode='json')),user['id']))
+                apply_case_mapping(c,cur.lastrowid)
                 created+=1
             audit(c,user,'import_ppkt_cases','ppkt',None)
         return {'created':created,'skipped':skipped+len(data.items)-len(unique)}

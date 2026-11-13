@@ -1,11 +1,79 @@
 {
-  "stages": ["Pelaporan", "Tindak Lanjut Pelaporan", "Pemeriksaan", "Penyusunan Kesimpulan, Rekomendasi, dan Putusan", "Tindak Lanjut Putusan"],
+  "stages": [
+    "Pelaporan",
+    "Tindak Lanjut Pelaporan",
+    "Pemeriksaan",
+    "Penyusunan Kesimpulan, Rekomendasi, dan Putusan",
+    "Tindak Lanjut Putusan"
+  ],
   "review": "Perlu Ditinjau",
   "aliases": {
     "laporan diterima": "Pelaporan",
     "tindak lanjut laporan": "Tindak Lanjut Pelaporan",
     "dengar keterangan": "Pemeriksaan",
     "pemeriksaan saksi": "Pemeriksaan",
-    "kesimpulan dan rekomendasi sanksi": "Penyusunan Kesimpulan, Rekomendasi, dan Putusan"
+    "kesimpulan dan rekomendasi sanksi": "Penyusunan Kesimpulan, Rekomendasi, dan Putusan",
+    "Tutup kasus": "Tindak Lanjut Putusan",
+    "Fakultas": "Tindak Lanjut Putusan",
+    "SK Pencabutan kasus": "Tindak Lanjut Putusan",
+    "Dengar keterangan": "Pemeriksaan",
+    "On Progress": "Pemeriksaan",
+    "Dengar keterangan & On Progress": "Pemeriksaan",
+    "Menentukan sanksi": "Penyusunan Kesimpulan, Rekomendasi, dan Putusan",
+    "Kesimpulan dan Rekomendasi Sanksi": "Penyusunan Kesimpulan, Rekomendasi, dan Putusan",
+    "Menentukan sanksi & Kesimpulan dan Rekomendasi Sanksi": "Penyusunan Kesimpulan, Rekomendasi, dan Putusan",
+    "Penugasan Satgas": "Tindak Lanjut Pelaporan",
+    "Tarik Kasus": "Tindak Lanjut Putusan",
+    "Sudah ditindak lanjuti oleh fakultas": "Tindak Lanjut Putusan",
+    "Sudah ditindaklanjuti oleh fakultas": "Tindak Lanjut Putusan",
+    "Sudah bertemu dengan korban": "Tindak Lanjut Putusan"
+  },
+  "migrations": {
+    "Tutup kasus": {
+      "status": "Tindak Lanjut Putusan"
+    },
+    "Fakultas": {
+      "status": "Tindak Lanjut Putusan"
+    },
+    "SK Pencabutan kasus": {
+      "status": "Tindak Lanjut Putusan"
+    },
+    "Dengar keterangan": {
+      "status": "Pemeriksaan"
+    },
+    "On Progress": {
+      "status": "Pemeriksaan"
+    },
+    "Dengar keterangan & On Progress": {
+      "status": "Pemeriksaan"
+    },
+    "Menentukan sanksi": {
+      "status": "Penyusunan Kesimpulan, Rekomendasi, dan Putusan"
+    },
+    "Kesimpulan dan Rekomendasi Sanksi": {
+      "status": "Penyusunan Kesimpulan, Rekomendasi, dan Putusan"
+    },
+    "Menentukan sanksi & Kesimpulan dan Rekomendasi Sanksi": {
+      "status": "Penyusunan Kesimpulan, Rekomendasi, dan Putusan"
+    },
+    "Penugasan Satgas": {
+      "status": "Tindak Lanjut Pelaporan"
+    },
+    "Tarik Kasus": {
+      "status": "Tindak Lanjut Putusan",
+      "position": "Tarik kasus"
+    },
+    "Sudah ditindak lanjuti oleh fakultas": {
+      "status": "Tindak Lanjut Putusan",
+      "position": "oleh fakultas"
+    },
+    "Sudah ditindaklanjuti oleh fakultas": {
+      "status": "Tindak Lanjut Putusan",
+      "position": "oleh fakultas"
+    },
+    "Sudah bertemu dengan korban": {
+      "status": "Tindak Lanjut Putusan",
+      "position": "mediasi"
+    }
   }
 }
