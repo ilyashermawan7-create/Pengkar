@@ -683,8 +683,9 @@ def main():
                 expect(page.get_by_text('Jumlah seluruh kasus',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('2')
                 total_pelaporan=page.get_by_role('heading',name='Total Pelaporan',exact=True).locator('xpath=ancestor::section[1]')
                 category_pelaporan=page.get_by_role('heading',name='Pelaporan',exact=True).locator('xpath=ancestor::section[1]')
-                expect(total_pelaporan.locator('p').first).to_have_text('0')
-                expect(category_pelaporan.locator('p').first).to_have_text('0')
+                expect(total_pelaporan.locator('p').first).to_have_text('2')
+                expect(category_pelaporan.locator('p').first).to_have_text('2')
+                expect(category_pelaporan).to_contain_text('100.0%')
 
                 expect(page.get_by_role('heading',name='Pemeriksaan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('1')
                 expect(page.get_by_text('0 status lama/kosong perlu ditinjau.',exact=False)).to_be_visible()
