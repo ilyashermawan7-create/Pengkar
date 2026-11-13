@@ -661,7 +661,7 @@ def main():
                 expect(listing).to_contain_text('Kegiatan Grup Asrama')
                 expect(listing).to_contain_text('Pengkar Asrama Rasio 2030')
                 page.get_by_label('Grup Pengguna',exact=True).select_option('ppk-telu')
-                expect(page.get_by_text('Total Laporan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('0')
+                expect(page.get_by_text('Jumlah seluruh kasus',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('0')
                 open_report(page)
                 cases_csv=b'Tahun,Tanggal Laporan Masuk,Nomor Kasus,Kategori,Status Kasus,Status Pelaporan (Pembuatan BAP),Konseling Pelapor,Fakultas Terlapor,Program Studi Terlapor\n2024,05/11/2024,CASE-TEST-1,Psikis,Tutup Kasus,TRUE,YA,FIF,Informatika\n2025,,CASE-TEST-2,,,FALSE,,FEB,Manajemen\n'
                 case_file={'name':'kasus-uji.csv','mimeType':'text/csv','buffer':cases_csv}
@@ -680,14 +680,19 @@ def main():
                 expect(page.get_by_text('Data kasus berhasil disimpan.',exact=True)).to_be_visible()
                 expect(case_list.locator('tr').filter(has_text='CASE-TEST-2')).to_contain_text('Pemeriksaan')
                 page.get_by_role('button',name='Dashboard',exact=False).first.click()
-                expect(page.get_by_text('Total Laporan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('2')
+                expect(page.get_by_text('Jumlah seluruh kasus',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('2')
+                total_pelaporan=page.get_by_role('heading',name='Total Pelaporan',exact=True).locator('xpath=ancestor::section[1]')
+                category_pelaporan=page.get_by_role('heading',name='Pelaporan',exact=True).locator('xpath=ancestor::section[1]')
+                expect(total_pelaporan.locator('p').first).to_have_text('0')
+                expect(category_pelaporan.locator('p').first).to_have_text('0')
+
                 expect(page.get_by_role('heading',name='Pemeriksaan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('1')
                 expect(page.get_by_text('0 status lama/kosong perlu ditinjau.',exact=False)).to_be_visible()
                 for label in ('Pelaporan','Tindak Lanjut Pelaporan','Pemeriksaan','Penyusunan Kesimpulan, Rekomendasi, dan Putusan','Tindak Lanjut Putusan'):
                     expect(page.get_by_role('heading',name=label,exact=True)).to_be_visible()
                 expect(page.get_by_text('1 kasus belum memiliki tanggal laporan masuk',exact=False)).to_be_visible()
                 page.get_by_label('Tahun kasus',exact=True).select_option('2024')
-                expect(page.get_by_text('Total Laporan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('1')
+                expect(page.get_by_text('Jumlah seluruh kasus',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('1')
                 monthly=page.get_by_role('heading',name='Tren Laporan Kasus per Bulan',exact=True).locator('xpath=ancestor::section[1]')
                 expect(monthly).to_contain_text('Bulanan')
                 monthly.get_by_text('Lihat angka',exact=True).click()
@@ -697,13 +702,13 @@ def main():
                 expect(page.get_by_role('heading',name='Tren Laporan Kasus per Tahun',exact=True)).to_have_count(0)
 
                 page.get_by_role('button',name='Reset Filter Kasus',exact=True).click()
-                expect(page.get_by_text('Total Laporan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('2')
+                expect(page.get_by_text('Jumlah seluruh kasus',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('2')
                 expect(page.get_by_role('heading',name='Dashboard PPKPT',exact=True)).to_be_visible()
                 distribution=page.get_by_role('region',name='Sebaran prodi kasus PPKPT',exact=True)
                 expect(distribution.locator('tbody tr')).to_have_count(2)
                 expect(distribution).not_to_contain_text('CASE-TEST-1')
                 page.get_by_label('Fakultas terlapor',exact=True).select_option('FIF')
-                expect(page.get_by_text('Total Laporan',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('1')
+                expect(page.get_by_text('Jumlah seluruh kasus',exact=True).locator('xpath=ancestor::section[1]')).to_contain_text('1')
                 expect(distribution.locator('tbody tr')).to_have_count(1)
                 page.get_by_role('button',name='Reset Filter Kasus',exact=True).click()
                 page.get_by_label('Cari prodi atau fakultas terlapor',exact=True).fill('Manajemen')
@@ -719,7 +724,7 @@ def main():
                 expect(page.get_by_alt_text('Logo Satgas PPKPT',exact=True)).to_be_visible()
                 assert page.get_by_alt_text('Logo Satgas PPKPT',exact=True).evaluate('(image)=>image.complete&&image.naturalWidth>0')
                 page.get_by_role('button',name='Dashboard',exact=False).first.click()
-                expect(page.get_by_text('Total Laporan',exact=True)).to_be_visible()
+                expect(page.get_by_text('Jumlah seluruh kasus',exact=True)).to_be_visible()
                 with page.expect_download() as exported:
                     page.get_by_role('button',name='Ekspor PDF Dashboard',exact=True).click()
                 pdf_path=Path(tmp)/'dashboard-ppkt.pdf'
@@ -829,7 +834,7 @@ def main():
                     selector=restricted.get_by_label('Grup Pengguna',exact=True)
                     expect(selector).to_be_visible()
                     assert selector.locator('option').evaluate_all('(options)=>options.map(option=>option.value)')==['overview',group]
-                    if role=='ppkpt':expect(restricted.get_by_text('Total Laporan',exact=True)).to_be_visible()
+                    if role=='ppkpt':expect(restricted.get_by_text('Jumlah seluruh kasus',exact=True)).to_be_visible()
                     else:expect(restricted.get_by_text('Total Kegiatan',exact=True)).to_be_visible()
                     selector.select_option(group)
                     open_report(restricted)
